@@ -1,0 +1,5 @@
+{
+    "python.analysis.extraPaths": [
+        "./WorkSpace/simple_distributed_rl"
+    ]
+}
