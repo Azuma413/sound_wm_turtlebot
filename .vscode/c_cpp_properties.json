@@ -1,0 +1,45 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/humble/ros2_ws/install/realsense2_camera/include/**",
+        "/home/humble/ros2_ws/install/realsense2_camera_msgs/include/**",
+        "/home/humble/ros2_ws/install/dynamixel_workbench_toolbox/include/**",
+        "/home/humble/ros2_ws/install/dynamixel_control/include/**",
+        "/home/humble/ros2_ws/install/cpp2_nhk/include/**",
+        "/home/humble/ros2_ws/install/cpp1_nhk/include/**",
+        "/home/humble/ros2_ws/install/chat_rover_bt/include/**",
+        "/home/humble/ros2_ws/install/chatrover_msgs/include/**",
+        "/home/humble/ros2_ws/install/actuator_custom_msgs/include/**",
+        "/home/humble/turtlebot3_ws/install/turtlebot3_fake_node/include/**",
+        "/home/humble/turtlebot3_ws/install/turtlebot3_msgs/include/**",
+        "/home/humble/turtlebot3_ws/install/turtlebot3_gazebo/include/**",
+        "/home/humble/uros_ws/install/micro_ros_agent/include/**",
+        "/home/humble/uros_ws/install/micro_ros_msgs/include/**",
+        "/opt/ros/humble/include/**",
+        "/home/humble/Documents/VScode/RL_Fighter/reference/simulator_dist/root/include/**",
+        "/home/humble/Documents/VScode/RL_Fighter/workspace/simulator_dist/root/include/**",
+        "/home/humble/Documents/VScode/ROS2_Pakcage/ros2/hello_world/include/**",
+        "/home/humble/Documents/VScode/ROS2_Pakcage/sample_pkg/include/**",
+        "/home/humble/Documents/VScode/ROS2_Pakcage/tutorial/include/**",
+        "/home/humble/Documents/VScode/crane_plus/crane_plus_control/include/**",
+        "/home/humble/Documents/VScode/crane_plus/crane_x7_hardware/include/**",
+        "/home/humble/Documents/VScode/crane_plus/master_slave_controller/include/**",
+        "/home/humble/Documents/VScode/mpu9250/include/**",
+        "/home/humble/Documents/VScode/nhk2024/NHK_ROS/R1/cpp1_nhk/include/**",
+        "/home/humble/Documents/VScode/nhk2024/NHK_ROS/R2/cpp2_nhk/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}

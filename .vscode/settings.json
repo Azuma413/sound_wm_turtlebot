@@ -1,5 +1,19 @@
 {
     "python.analysis.extraPaths": [
         "./WorkSpace/simple_distributed_rl"
+    ],
+    "python.autoComplete.extraPaths": [
+        "/home/humble/ros2_ws/install/realsense2_camera_msgs/local/lib/python3.10/dist-packages",
+        "/home/humble/ros2_ws/install/py2_nhk/lib/python3.10/site-packages",
+        "/home/humble/ros2_ws/install/py1_nhk/lib/python3.10/site-packages",
+        "/home/humble/ros2_ws/install/chat_rover/lib/python3.10/site-packages",
+        "/home/humble/ros2_ws/install/chatrover_msgs/local/lib/python3.10/dist-packages",
+        "/home/humble/ros2_ws/install/actuator_custom_msgs/local/lib/python3.10/dist-packages",
+        "/home/humble/turtlebot3_ws/install/turtlebot3_teleop/lib/python3.10/site-packages",
+        "/home/humble/turtlebot3_ws/install/turtlebot3_example/lib/python3.10/site-packages",
+        "/home/humble/turtlebot3_ws/install/turtlebot3_msgs/local/lib/python3.10/dist-packages",
+        "/home/humble/uros_ws/install/micro_ros_msgs/local/lib/python3.10/dist-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
     ]
 }
