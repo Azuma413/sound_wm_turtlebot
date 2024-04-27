@@ -18,7 +18,7 @@ for i in range(p.get_device_count()):
     if i == p.get_device_count() - 1:
         print("Device not found")
         exit()
-        
+
 # 定数の定義
 form_1 = pyaudio.paInt16 # 16-bit resolution
 chans = 8 #4 # チャンネル数
