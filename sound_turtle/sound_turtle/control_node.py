@@ -5,6 +5,8 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
+from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Float32
 
 # 画像処理関連のモジュールのインポート
 from cv_bridge import CvBridge
@@ -12,7 +14,7 @@ import cv2
 # *************************************************************************************************
 # 定数の定義
 # *************************************************************************************************
-PUB_IMG = False
+
 # *************************************************************************************************
 # クラスの定義
 # *************************************************************************************************
@@ -20,15 +22,13 @@ class ControlNode(Node):
 
     def __init__(self):
         super().__init__('control_node')
-        # パラメータの宣言と取得
-        self.declare_parameter("color", "blue")
-        self.color = self.get_parameter('color').get_parameter_value().string_value # blue:右側 red:左側
-        # 全体用の変数
+        # 変数
         self.raw_image = None
         self.id_color_flag = False
         # ROSの設定
-        if PUB_IMG:
-            self.image_pub = self.create_publisher(Image, 'obs_image', 10)
+        self.goal_pose_pub = self.create_publisher(PoseStamped, 'goal_pose', 10)
+        self.create_subscription(Image, "obs_image", self.obs_image_callback, 10)
+        self.create_subscription(Float32, "reward", self.reward_callback, 10)
         self.bridge = CvBridge() # OpenCVとROSの画像を変換するためのクラス
         self.create_timer(0.1, self.timer_callback)
     
