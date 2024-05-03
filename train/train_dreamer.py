@@ -35,7 +35,7 @@ def main():
   ])
 
 #   import crafter
-  from embodied.envs import from_gym
+  from dreamerv3.embodied.envs import from_gym
   from train.my_envs.my_env import MyEnv # add
   # env = crafter.Env()  # Replace this with your Gym env.
   env = MyEnv()

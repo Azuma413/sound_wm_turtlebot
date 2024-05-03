@@ -17,10 +17,10 @@ import torch
 from dm_env import specs
 
 # import dmc
-import utils
-from logger import Logger
-from replay_buffer import ReplayBufferStorage, make_replay_loader
-from video import TrainVideoRecorder, VideoRecorder
+from drqv2 import utils
+from drqv2.logger import Logger
+from drqv2.replay_buffer import ReplayBufferStorage, make_replay_loader
+from drqv2.video import TrainVideoRecorder, VideoRecorder
 
 from train.my_envs.my_env import MyEnv, WrapDrQ
 

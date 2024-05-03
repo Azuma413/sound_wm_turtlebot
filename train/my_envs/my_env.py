@@ -12,6 +12,7 @@ import cv2
 import os
 import time
 from dm_env import specs
+import yaml
 
 class WrapDrQ(gym.Env):
     def __init__(self, env):
@@ -29,93 +30,92 @@ class WrapDrQ(gym.Env):
     def render(self, mode='rgb_array'):
         return self.env.render()
 
-
 class MySimulator:
-    def __init__(self, robot_pos=[0.2, 0.3], image_size=250, sound_locations = [[0.2, 0.4], [0.7, 0.5]], threshold=0.5):
+    def __init__(self, map_name="327", robot_pos=[0.2, 0.3], sound_locations = [[0.2, 0.4], [0.7, 0.5]], threshold=0.5):
         ### パラメータの設定 ###
         # DOA推定のための設定
-        self.c = 343.    # speed of sound
         self.fs = 16000  # サンプリングレート
         self.nfft = 256  # FFT size
-        self.freq_range = [300, 3500]
-        snr_db = 5.    # ガウスノイズのSNR
+        self.freq_range = [300, 3500] # 推定する周波数帯域
+        # mapの読み込み
+        yaml_path = os.path.dirname(os.path.abspath(__file__)) + "/map/" + map_name + ".yaml"
+        with open(yaml_path, 'r') as file:
+            map_data = yaml.safe_load(file)
+            self.map_image = cv2.imread(os.path.dirname(os.path.abspath(__file__)) + "/map/" + map_data["image"], cv2.IMREAD_GRAYSCALE)
+            self.resolution = map_data["resolution"] # 1pixelあたりのメートル数
+            self.origin = np.array(map_data["origin"]) # mapの右下の隅のpose
+        # シミュレーションの設定
         # 部屋の形状はmapデータを参照して適切に決める。音の反響はある程度割り切る。
-        self.corners = np.array([[0,0], [6,0], [6,8], [0,8]])  # [x,y] 壁がない部屋
+        self.corners = np.array([[0,0], [self.map_image.shape[0]*self.resolution,0], [self.map_image.shape[0]*self.resolution,self.map_image.shape[1]*self.resolution], [0,self.map_image.shape[1]*self.resolution]])  # [x,y] 壁がない部屋
         self.room_dim = np.array([max(self.corners[:,0]), max(self.corners[:,1])]) # 部屋の大まかな寸法
         self.height = 3. # 天井の高さ
         # ロボットの初期設定
         self.center = ((self.room_dim - np.array([1, 1])) * np.array([robot_pos]) + np.array([0.5, 0.5])).reshape(-1) # ロボットの初期位置
-        self.robot_angle = 0 # ロボットの角度[rad]0がx軸方向を指す
         self.robot_height = 0.3 # ロボットの高さ
-        self.robot_vel = 0.2 # ロボットの最大速度[m/s]
-        self.robot_ang_vel = np.pi/3 # ロボットの最大角速度[rad/s]
-        self.mic_num = 6 # マイクロフォンアレイの数
-        # LiDAR(LDS-01)のスペック
-        self.distance_range = (120, 3500) # mm
-        self.distance_accuracy = 10 # mm
-        self.angular_range = 360 # degree
-        self.angular_resolution = 1 # degree
-        # 観測の設定 修正が必要
-        self.image_size = image_size
-        self.max_field = 5 # 表示する領域の広さ
-        self.spacing = self.max_field/image_size # 1画素が示す空間の大きさ[m/pixel]
-        self.image = np.zeros((int((self.room_dim[0]+self.max_field)/self.spacing)+1, int((self.room_dim[1]+self.max_field)/self.spacing)+1, 3), dtype=np.float32) # 画像を格納する配列
-        # print("image shape:", self.image.shape)
+        self.move_range = 0.5 # ロボットの移動範囲[m]
+        self.mic_num = 8 # マイクロフォンアレイの数
+        # 観測の設定
+        self.image = np.zeros((self.map_image.shape[0], self.map_image.shape[1], 3), dtype=np.float32) # 画像を格納する配列 (R:音源の存在確率, G:map, B:robot) 0-255
         self.image[:,:,0] = 255*threshold # Rチャンネルの値を初期化
-        self.delta_time = 1.0 # シミュレーションの時間間隔[s]
-        self.obs = np.zeros((self.image_size, self.image_size, 3), dtype=np.float32) # 画像を格納する配列
+        self.image[:,:,1] = map_data # Gチャンネルの値を初期化
         # 音源の位置
         sound_height = 1.3
-        self.sound_locations_2d = (self.room_dim - np.array([2, 2])) * np.array(sound_locations) + np.array([1, 1]) # 音源の位置
+        generate_range = 1.0 # mapの外側からどれだけ離れた位置に音源を生成するか
+        self.sound_locations_2d = (self.room_dim - np.array([2*generate_range, 2*generate_range])) * np.array(sound_locations) + np.array([generate_range, generate_range]) # 音源の位置
         self.sound_locations = np.concatenate([self.sound_locations_2d, sound_height * np.ones((len(self.sound_locations_2d), 1))], axis=1)
-        sound_path = "SoundSource/sound_source.wav" # 音源の相対path
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        sound_path = os.path.join(current_dir, sound_path) # 絶対pathに変換
-        use_original_sound = False # Trueなら音源をそのまま使う。Falseならランダムな音源を生成する。
-        # 画像作成の設定
-        self.real_sim = True # Trueならより実環境に近いシミュレーションを行う
-        
-        ### 初期化処理 ###
-        # ガウスノイズの設定
-        self.sigma2 = 10**(snr_db / 10) / (4. * np.pi * 2.)**2
+        use_original_sound = False # Trueなら音源をそのまま使う。Falseならランダムな音源を生成する。 
         # 音源を作成
         if use_original_sound:
+            sound_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "SoundSource/sound_source.wav")
             _, self.audio = wavfile.read(sound_path)
         else:
             self.audio = np.random.randn(16000)
-            
+    
+    def coord2pixel(self, coord):
+        """
+        coord: 2次元座標
+        ROSの座標系から画像の座標系に変換する
+        """
+        u = self.map_image.shape[1] - int((coord[1] - self.origin[1])/self.resolution)
+        v = self.map_image.shape[0] - int((coord[0] - self.origin[0])/self.resolution)
+        return np.array([u, v])
+    
+    def pixel2coord(self, pixel):
+        """
+        pixel: 2次元座標
+        画像の座標系からROSの座標系に変換する
+        """
+        x = self.origin[0] + (self.map_image.shape[0] - pixel[1])*self.resolution
+        y = self.origin[1] + (self.map_image.shape[1] - pixel[0])*self.resolution
+        return np.array([x, y])
+
     def update_robot_pos(self, action):
         """
         action: 標準化されたロボットの速度と角速度の配列
         """
         new_center = self.center.copy()
-        new_center[0] -= self.robot_vel * self.delta_time * action[0]
-        new_center[1] += self.robot_vel * self.delta_time * action[1] # 想定される新しい位置
-        # 進行方向が壁にぶつかる場合はfalseを返す
-        # self.cornersのそれぞれの辺について，self.centerとnew_centerを結ぶ直線が辺と交差するかどうかを調べる
-        for i in range(len(self.corners)):
-            a, b = self.center
-            c, d = new_center
-            p, q = self.corners[i%len(self.corners)]
-            r, s = self.corners[(i+1)%len(self.corners)]
-            # 2直線の交点を求める
-            if(q == s) and (d - q)*(b - q) <= 0:
-                y = a + (c - a)*abs((s - b)/(d - b))
-                if (p - y)*(r - y) <= 0:
-                    return False
-            elif(p == r) and (c - p)*(a - p) <= 0:
-                x = b + (d - b)*abs((r - a)/(c - a))
-                if (q - x)*(s - x) <= 0:
-                    return False
+        new_center[0] -= self.move_range*action[0]
+        new_center[1] += self.move_range*action[1]
+        # self.centerとnew_centerの間に壁があるかどうかを調べる
+        start = self.coord2pixel(self.center)
+        end = self.coord2pixel(new_center)
+        diff = end - start
+        if np.abs(diff[0]) > np.abs(diff[1]):
+            step = np.abs(diff[0])
+        else:
+            step = np.abs(diff[1])
+        for i in range(step):
+            x = int(start[0] + i*diff[0]/step)
+            y = int(start[1] + i*diff[1]/step)
+            if self.map_image[y, x] == 0 or self.map_image[y, x] == 205: # 0は障害物，205は未知の領域
+                return False
         self.center = new_center
         return True
-            
 
     def simulate(self):
-        # 部屋をつくる
-        aroom = pra.Room.from_corners(self.corners.T, fs=self.fs, materials=None, max_order=3, sigma2_awgn=self.sigma2, air_absorption=True)
+        aroom = pra.Room.from_corners(self.corners.T, fs=self.fs, materials=None, max_order=3, sigma2_awgn=10**(5 / 10) / (4. * np.pi * 2.)**2, air_absorption=True)
         aroom.extrude(self.height)
-        mic_locs = pra.circular_2D_array(center=self.center.tolist(), M=self.mic_num, phi0=0, radius=0.1)
+        mic_locs = pra.circular_2D_array(center=self.center.tolist(), M=self.mic_num, phi0=0, radius=0.035)
         mic_locs_z = np.concatenate((mic_locs, np.ones((1, mic_locs.shape[1]))*self.robot_height), axis=0)
         aroom.add_microphone_array(mic_locs_z)
         for i in range(self.sound_locations.shape[0]):
@@ -130,77 +130,31 @@ class MySimulator:
         X = pra.transform.stft.analysis(aroom.mic_array.signals.T, self.nfft, self.nfft // 2)
         X = X.transpose([2, 1, 0])
         # DOAの計算
-        doa = pra.doa.algorithms['MUSIC'](mic_locs, self.fs, self.nfft, c=self.c, num_src=2, max_four=4)
+        doa = pra.doa.algorithms['MUSIC'](mic_locs, self.fs, self.nfft, c=343., num_src=2, max_four=4)
         doa.locate_sources(X, freq_range=self.freq_range)
         spatial_resp = doa.grid.values # 標準化をなくしている
-        # min_val = spatial_resp.min()
-        # max_val = spatial_resp.max()
-        # spatial_resp = (spatial_resp - min_val) / (max_val - min_val)
-        # spatial_resp = (spatial_resp) / (max_val) # normalize to 0-1
-        spatial_resp /= 1.1 # 2.0
-        # print("spatial_resp max:", spatial_resp.max())
-        
-        self.image[:,:,1:] = 0.0 # red以外は一旦リセット
+        spatial_resp /= 1.1 # 2.0 良い感じに調整している
+        # robotの画像上の座標
+        robot_pixel = self.coord2pixel(self.center)
 
-        # 音源の方向を描画するgridの作成
-        # 各グリッドの座標の中心点を計算
-        center_ = self.max_field/2  + self.center
-        x = np.arange(0, self.room_dim[0]+self.max_field, self.spacing) + self.spacing / 2
-        y = np.arange(0, self.room_dim[1]+self.max_field, self.spacing) + self.spacing / 2
-        # print("x:", x.shape, "y:", y.shape)
-        points = np.array(np.meshgrid(x, y)).T.reshape(-1, 2) # 各グリッドの中心座標を直列に並べる
-        angles = np.arctan2(points[:,1] - center_[1], points[:,0] - center_[0])*180/np.pi # 各点について、マイクロフォンアレイの座標からの角度を計算。ピクセル数分の角度が得られる
-        angles = np.round(angles) # 小数点以下を四捨五入
-        angles[angles < 0] += 360 # 0から360度までの範囲にする
-        angles[angles >= 360] -= 360
-        # gridの各点について、anglesの値番目のdataを加算
-        for i, angle in enumerate(angles):
-            shift_value = 0.2 # 存在確率をどれだけシフトするか, 0.5なら元の値に対して0.5~1.5の値が加算される。値を大きくするほど確率分布が収束しにくくなる。
-            self.image[int(points[i,0]/self.spacing), int(points[i,1]/self.spacing), 0] *= spatial_resp[int(angle)] + shift_value # ここでエラー
-        # 全体に10を加える
-        self.image[:,:,0] += 0.1 # 3.0 # 値が小さくなりすぎると更新が上手くいかなくなる
-        # 画像の値を0-255にする
+        # Rチャンネルの値を更新
+        # 画像上の各pixelのマイクロフォンアレイからの角度を計算してanglesに格納
+        points = np.array(np.meshgrid(np.arange(self.map_image.shape[0]), np.arange(self.map_image.shape[1]))).T.reshape(-1, 2)
+        point_angles = np.arctan2(points[:,1] - robot_pixel[1], points[:,0] - robot_pixel[0])*180/np.pi
+        point_angles = (point_angles + 360) % 360
+        for i, point_angle in enumerate(point_angles):
+            shift_value = 0.2 # 値を大きくするほど，確率分布が収束しにくくなる
+            self.image[points[i,0], points[i,1], 0] *= spatial_resp[int(point_angle)] + shift_value
+        self.image[:,:,0] += 0.1 # 値が小さくなりすぎると更新が上手くいかなくなる
         self.image[self.image < 0] = 0.0
         self.image[self.image > 255] = 255.0
-
-        # lidarのデータを描画するgridの作成 要らない
-        point_list = []
-        for angle in range(0, 180, self.angular_resolution):
-            theta = np.deg2rad(angle + self.angular_resolution/2)
-            points = [[1e5, 1e5], [-1e5, -1e5]]
-            for i in range(len(self.corners)):
-                epsilon = 1e-6
-                a, b = self.center
-                p, q = self.corners[i%len(self.corners)]
-                r, s = self.corners[(i+1)%len(self.corners)]
-                x = (b - s - a*np.tan(theta) + r*(q - s)/(p - r + epsilon))/((q - s)/(p - r + epsilon) - np.tan(theta))
-                y = np.tan(theta)*x + b - a*np.tan(theta)
-                if (x - p)*(x - r) <= epsilon and (y - q)*(y - s) <= epsilon: # 線分上にあるか
-                    # x > center[0]の点からxが最も小さい点を選ぶ
-                    if x >= self.center[0]:
-                        if points[0][0] > x:
-                            # 0.01mの誤差を加える
-                            points[0] = [x + np.random.normal(0, 0.01), y + np.random.normal(0, 0.01)]
-                    # x < center[0]の点からxが最も大きい点を選ぶ
-                    else:
-                        if points[1][0] < x:
-                            points[1] = [x + np.random.normal(0, 0.01), y + np.random.normal(0, 0.01)]
-            point_list.append(points[0])
-            point_list.append(points[1])
-        point_list_np = np.array(point_list) # m
-        # ポイントをグリッドに描画
-        size = 1
-        for point in point_list_np:
-            x, y = point
-            x = int((x + self.max_field/2)/self.spacing)
-            y = int((y + self.max_field/2)/self.spacing)
-            self.image[:,:,1][x-size:x+size, y-size:y+size] = 255.0
-        pass
+        
+        # Bチャンネルの値を更新
+        self.image[:,:,2] = 0.0
+        size = 2
+        self.image[:,:,1:][robot_pixel[0]-size:robot_pixel[0]+size, robot_pixel[1]-size:robot_pixel[1]+size] = 255.0
     
 class MyEnv(gym.Env):
-    """
-    MyEnvの改造版
-    """
     def __init__(self, env_config=None):
         super(MyEnv, self).__init__()
         """
@@ -212,13 +166,13 @@ class MyEnv(gym.Env):
         self.image_size = 128
         self.observation_space = spaces.Box(low=0, high=1.0, shape=(self.image_size, self.image_size, 3), dtype=np.float32)
         self.reward_range = [-5., 5.]
-        # self.reward_range = [-1., 1.]
         self.my_sim = None
         # 確率範囲の絞り込みに対する報酬の重み(音源の位置を正しく推定する事への報酬の重みは，1からこの値を引いたものになる)
         self.distribution_reward_weight = 0.4
         self.max_episode_steps = 100 # 50
         self.episode_count = 0
         self.confidence_threshold = 0.7 # 音源の存在確率がこの値を超えたら音源が存在すると判定
+        self.map_name = "327"
         # ロボットの軌跡
         self.trajectory = []
         # 画像のリスト
@@ -228,50 +182,37 @@ class MyEnv(gym.Env):
         self.reward_value = 0
         self.reward_sum = 0
         self.estimated_sound_location = []
-        self.isnt_hit_wall = False
-        # 環境をrayで実行するかどうか
-        self.is_ray = False
-        # 観測を二値化するかどうか
-        self.is_binary = False
-        self.step_time = 0.0
+        self.move_result = True
+        self.render_size = 560
 
     def reset(self, seed=None, options=None):
         """
         環境を初期状態にして初期状態(state)の観測(observation)をreturnする
         """
-        # self.step_time = time.time()
         # 変数の初期化
         self.episode_count = 0
         self.reward_value = 0
         self.reward_sum = 0
         self.trajectory = []
         self.estimated_sound_location = []
-        self.isnt_hit_wall = False
+        self.move_result = True
         # ロボットの初期位置と音源の位置をランダムに設定
         robot_pos = np.random.rand(2).tolist()
         sound_locations = np.random.rand(1, 2).tolist()
         # シミュレータの初期化
-        self.my_sim = MySimulator3(robot_pos=robot_pos, image_size=self.image_size, sound_locations=sound_locations, threshold=self.confidence_threshold, use_random_corners=True)
-        self.my_sim.robot_angle = np.random.rand()*2*np.pi - np.pi # ロボットの初期角度をランダムに設定
+        self.my_sim = MySimulator(map_name=self.map_name, robot_pos=robot_pos, sound_locations=sound_locations, threshold=self.confidence_threshold)
         # シミュレーションの実行
         self.my_sim.simulate()
         # 観測の取得
-        obs = self.my_sim.obs/255.0
-        if self.is_binary:
-            red_img = obs[:,:,0]
-            _, bin_img = cv2.threshold(red_img, self.confidence_threshold, 1.0, cv2.THRESH_BINARY) # 二値化
-            obs[:,:,0] = bin_img
+        obs = cv2.resize(self.my_sim.image, (self.image_size, self.image_size))/255.0
         # 軌跡の記録
-        self.trajectory.append(self.my_sim.center.tolist())
+        self.trajectory.append(self.my_sim.coord2pixel(self.my_sim.center).tolist())
         # 画像の保存
         if self.save_video:
             self.image_list = []
             img = self.render()
             self.image_list.append(img)
-        if self.is_ray:
-            return obs, {} # ray用
-        else:
-            return obs # gym用
+        return obs
 
     def step(self, action):
         """
@@ -286,42 +227,39 @@ class MyEnv(gym.Env):
         # エピソード数の更新
         self.episode_count += 1
         # ロボットの位置の更新
-        self.isnt_hit_wall = self.my_sim.update_robot_pos(np.asarray(action))
+        self.move_result = self.my_sim.update_robot_pos(np.asarray(action))
         # 軌跡の記録
-        self.trajectory.append(self.my_sim.center.tolist())
+        self.trajectory.append(self.my_sim.coord2pixel(self.my_sim.center).tolist())
         # シミュレーションの実行
         self.my_sim.simulate()
         # 観測の取得
         obs = self.my_sim.image/255.0
         # 報酬の計算
-        if self.isnt_hit_wall == False:
-            reward = -1. # -5.
+        if self.move_result == False:
+            reward = -1.
         else:
             # 音源の位置の存在確率分布が収束度合に応じて報酬を与える
             n = np.sum(obs[:,:,0] < self.confidence_threshold)
             pixel_num = obs.shape[0]*obs.shape[1]
             x = 2 # tanhの定義域をどれだけシフトさせるか
             reward = np.tanh(4*(n - pixel_num*3/4)/(pixel_num/4)-x)*self.distribution_reward_weight
+            
+            # 推定された音源位置と真の位置の差に応じて報酬を与える
             points = np.argwhere(obs[:,:,0] > self.confidence_threshold) # 2次元配列のTrueの要素のインデックスを返す
             if len(points) == 0: # 音源を見失っていた場合は罰則を与える
                 reward = -1.0
             else:
                 # 見失っていなければ，音源との距離に応じた報酬を与える
                 point = np.mean(points, axis=0)
-                # point = np.mean(points, axis=0) + (np.array([self.my_sim.max_field/2, self.my_sim.max_field/2]) + self.my_sim.center)/self.my_sim.spacing - self.image_size/2
+                map_point = self.my_sim.pixel2coord(point)
                 self.estimated_sound_location.append(point)
-                sound_loc_num = len(self.my_sim.sound_locations_2d)
-                for sound_loc in self.my_sim.sound_locations_2d:
-                    x, y = np.array([self.my_sim.max_field/2, self.my_sim.max_field/2]) + sound_loc # map上の座標に変換
-                    x = x / self.my_sim.spacing
-                    y = y / self.my_sim.spacing
-                    reward += (np.exp(-np.sqrt((point[0] - x)**2 + (point[1] - y)**2)*5e-2)*2 - 1.0)/sound_loc_num*(1-self.distribution_reward_weight)
-                    
+                sound_loc = np.mean(self.my_sim.sound_locations_2d)
+                reward += (2*np.exp(-np.linalg.norm(map_point - sound_loc)*1.0) - 1)*(1-self.distribution_reward_weight) # 1.0はスケール
+
         if self.episode_count >= self.max_episode_steps:
             done = True
             
-        obs = self.my_sim.obs/255.0
-            
+        obs = cv2.resize(self.my_sim.image, (self.image_size, self.image_size))/255.0
         # 報酬の記録
         self.reward_value = reward
         self.reward_sum += reward
@@ -353,15 +291,7 @@ class MyEnv(gym.Env):
                     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
                     out.write(image)
                 out.release()
-        # self.confidence_threshold*255以上のRチャンネルの値を持つピクセルを2値化して置き換える
-        if self.is_binary:
-            red_img = obs[:,:,0]
-            _, bin_img = cv2.threshold(red_img, self.confidence_threshold, 1.0, cv2.THRESH_BINARY) # 二値化
-            obs[:,:,0] = bin_img
-        if self.is_ray:
-            return obs, reward, done, truncateds, info # ray用
-        else:
-            return obs, reward, done, info # gym用
+        return obs, reward, done, info
 
     def render(self, mode='rgb_array'):
         """
@@ -371,7 +301,7 @@ class MyEnv(gym.Env):
         # 画像の取得
         img = np.array(self.my_sim.image, dtype=np.uint8)
         # 画像を高解像度化
-        img = cv2.resize(img, (img.shape[1]*4, img.shape[0]*4), interpolation=cv2.INTER_NEAREST)
+        img = cv2.resize(img, (self.render_size, self.render_size), interpolation=cv2.INTER_NEAREST)
         # Bチャンネルをリセットしてロボットの位置を描画
         img[:,:,2] = 0
         x, y = self.my_sim.center
@@ -427,19 +357,10 @@ class MyEnv(gym.Env):
         lineType = 2
         cv2.putText(img, f"rwd: {self.reward_value:.3f}", (20, img.shape[0]-15), font, fontScale, fontColor, lineType)
         cv2.putText(img, f"sum: {self.reward_sum:.3f}", (20, 30), font, fontScale, fontColor, lineType)
-        if not self.isnt_hit_wall:
+        if not self.move_result:
             cv2.putText(img, "hit wall", (int(img.shape[1]/2), img.shape[0]-15), font, fontScale, (255, 100, 0), lineType)
         img = cv2.resize(img, (560, 560), interpolation=cv2.INTER_NEAREST) # 画像を16の倍数にリサイズ
         return img
-
-
-
-
-
-
-
-
-
 
 if __name__ == "__main__":
     env = MyEnv()
