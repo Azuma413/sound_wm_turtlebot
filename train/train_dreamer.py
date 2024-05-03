@@ -36,9 +36,9 @@ def main():
 
 #   import crafter
   from embodied.envs import from_gym
-  from my_envs.gym_env import MyEnv3 # add
+  from train.my_envs.my_env import MyEnv # add
   # env = crafter.Env()  # Replace this with your Gym env.
-  env = MyEnv3()
+  env = MyEnv()
   env = from_gym.FromGym(env, obs_key='image')  # Or obs_key='vector'.
   env = dreamerv3.wrap_env(env, config)
   env = embodied.BatchEnv([env], parallel=False)
