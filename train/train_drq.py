@@ -22,7 +22,7 @@ from drqv2.logger import Logger
 from drqv2.replay_buffer import ReplayBufferStorage, make_replay_loader
 from drqv2.video import TrainVideoRecorder, VideoRecorder
 
-from train.my_envs.my_env import MyEnv, WrapDrQ
+from my_envs.my_env import MyEnv, WrapDrQ
 
 torch.backends.cudnn.benchmark = True
 
@@ -110,7 +110,7 @@ class Workspace:
                     action = self.agent.act(time_step["observation"],
                                             self.global_step,
                                             eval_mode=True)
-                    print("action: ", action)
+                    # print("action: ", action)
                 time_step = self.eval_env.step(action)
                 self.video_recorder.record(self.eval_env)
                 total_reward += time_step["reward"]
@@ -209,7 +209,7 @@ class Workspace:
             self.__dict__[k] = v
 
 
-@hydra.main(config_path='cfgs', config_name='config')
+@hydra.main(config_path='drqv2/cfgs', config_name='config')
 def main(cfg):
     root_dir = Path.cwd()
     workspace = Workspace(cfg)
@@ -221,5 +221,5 @@ def main(cfg):
 
 
 if __name__ == '__main__':
-    print("execute my_train.py")
+    print("execute train_drq.py")
     main()
