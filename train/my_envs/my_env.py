@@ -44,6 +44,10 @@ class MySimulator:
         with open(yaml_path, 'r') as file:
             map_data = yaml.safe_load(file)
             self.map_image = cv2.imread(os.path.dirname(os.path.abspath(__file__)) + "/map/" + map_data["image"], cv2.IMREAD_GRAYSCALE)
+            
+            # 4倍にリサイズ（本番は削除すること）
+            self.map_image = cv2.resize(self.map_image, (self.map_image.shape[1]*4, self.map_image.shape[0]*4), interpolation=cv2.INTER_NEAREST)
+            
             self.resolution = map_data["resolution"] # 1pixelあたりのメートル数
             self.origin = np.array(map_data["origin"]) # mapの右下の隅のpose
         # シミュレーションの設定
@@ -150,7 +154,7 @@ class MySimulator:
         for i, point_angle in enumerate(point_angles):
             shift_value = 0.4 # 値を大きくするほど，確率分布が収束しにくくなる
             self.image[points[i,0], points[i,1], 0] *= max(spatial_resp[int(point_angle)] + shift_value, 0.95) # ピーキーな値の変動を抑える
-        self.image[:,:,0] += 1.0 # 値が小さくなりすぎると更新が上手くいかなくなる
+        self.image[:,:,0] += 0.1 # 値が小さくなりすぎると更新が上手くいかなくなる
         self.image[self.image < 0] = 0.0
         self.image[self.image > 255] = 255.0 
         
