@@ -60,6 +60,8 @@ class DoaNode(Node):
         doa = pra.doa.algorithms['MUSIC'](self.mic_locs, samp_rate, nfft, c=c, num_src=1, max_four=4)
         doa.locate_sources(X, freq_range=freq_range)
         spatial_resp = doa.grid.values
+        # 0-1に正規化
+        spatial_resp = (spatial_resp - spatial_resp.min())/(spatial_resp.max() - spatial_resp.min())
         self.get_logger().info("Elapsed Time: {}".format(time.time() - start_time))
         msg.data = spatial_resp.tolist()
         self.publisher_.publish(msg)

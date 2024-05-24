@@ -23,10 +23,12 @@ import os
 import time
 from dm_env import specs
 import yaml
+from dreamer_util import DreamerV3Agent
+from drq_util import DrQV2Agent
 # *************************************************************************************************
 # 定数の定義
 # *************************************************************************************************
-MODEL = "DrQ-v2" # or "DreamerV3"
+MODEL = "DreamerV3" # or "DrQ-v2"
 DRQ_PATH = get_package_share_directory('sound_turtle') + "/weights/best.pt"
 DREAMER_PATH = get_package_share_directory('sound_turtle') + "/weights/best.ckpt"
 # *************************************************************************************************
@@ -35,6 +37,9 @@ DREAMER_PATH = get_package_share_directory('sound_turtle') + "/weights/best.ckpt
 class ControlNode(Node):
     """
     全体を包括する制御用クラス
+    受け取った画像はコールバック関数内で環境にセットされる
+    get_actionサービスを受け取ると，agentを動かしてから，get_action関数を呼び出して行動を取得する
+    行動をresponseとして返す
     """
     def __init__(self):
         super().__init__('control_node')
@@ -45,12 +50,13 @@ class ControlNode(Node):
         self.create_service(GetAction, 'get_action', self.get_action_callback)
         # OpenCVの設定
         self.bridge = CvBridge()
-        # 環境の作成
+        # 環境とagentの作成
         self.env = ROSEnv()
         if MODEL == "DrQ-v2":
             self.env = WrapDrQ(self.env)
-        # agentの作成
-        if MODEL == "DrQ-v2":
+            self.agent = DrQV2Agent(self.env) # DrQ-v2のエージェントを作成 いったん保留
+        elif MODEL == "DreamerV3":
+            self.agent = DreamerV3Agent(self.env) # DreamerV3のエージェントを作成
             
     def image_callback(self, msg):
         """
@@ -62,11 +68,11 @@ class ControlNode(Node):
         """
         行動を取得するサービスのコールバック関数
         """
-        action = self.env.get_action()
-        response.action0 = action[0]
-        response.action1 = action[1]
+        self.agent.action() # エージェントを動かす
+        response.action0 = self.env.get_action()[0]
+        response.action1 = self.env.get_action()[1]
         return response
-        
+
 class WrapDrQ(gym.Env):
     """
     DrQ-v2用に環境をラップするクラス
