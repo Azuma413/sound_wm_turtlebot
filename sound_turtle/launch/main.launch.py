@@ -7,7 +7,6 @@
         # ),
 
 import os
-
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
@@ -17,7 +16,6 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 TURTLEBOT3_MODEL = os.environ['TURTLEBOT3_MODEL']
-
 
 def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
@@ -74,4 +72,16 @@ def generate_launch_description():
             arguments=['-d', rviz_config_dir],
             parameters=[{'use_sim_time': use_sim_time}],
             output='screen'),
+        Node(
+            package="sound_turtle",
+            executable="control_node",
+            name="control_node",
+            output="screen",
+        ),
+        Node(
+            package="sound_turtle",
+            executable="wrap_node",
+            name="wrap_node",
+            output="screen",
+        ),
     ])
