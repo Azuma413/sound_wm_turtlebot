@@ -9,7 +9,7 @@ def main():
   config = embodied.Config(dreamerv3.configs['defaults'])
   config = config.update(dreamerv3.configs['medium'])
   config = config.update({
-      'logdir': Path(__file__).parent + '/weight/dreamerv3/run0',
+      'logdir': Path(__file__).parent / 'weight/dreamerv3/run0',
       'run.train_ratio': 64,
       'run.log_every': 30,  # Seconds
       'batch_size': 16,

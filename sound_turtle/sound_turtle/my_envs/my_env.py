@@ -46,7 +46,7 @@ class MySimulator:
             self.map_image = cv2.imread(os.path.dirname(os.path.abspath(__file__)) + "/map/" + map_data["image"], cv2.IMREAD_GRAYSCALE)
             
             # 4倍にリサイズ（本番は削除すること）
-            # self.map_image = cv2.resize(self.map_image, (self.map_image.shape[1]*4, self.map_image.shape[0]*4), interpolation=cv2.INTER_NEAREST)
+            self.map_image = cv2.resize(self.map_image, (self.map_image.shape[1]*4, self.map_image.shape[0]*4), interpolation=cv2.INTER_NEAREST)
             
             self.resolution = map_data["resolution"] # 1pixelあたりのメートル数
             self.origin = np.array(map_data["origin"]) # mapの右下の隅のpose

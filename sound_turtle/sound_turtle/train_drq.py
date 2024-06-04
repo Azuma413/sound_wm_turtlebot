@@ -23,7 +23,7 @@ def make_agent(obs_spec, action_spec, cfg):
 
 class Workspace:
     def __init__(self, cfg):
-        self.work_dir = Path.cwd() + '/weight/drqv2/run0' # 重みの保存先
+        self.work_dir = Path.cwd() / 'weight/drqv2/run0' # 重みの保存先
         print(f'workspace: {self.work_dir}')
 
         self.cfg = cfg

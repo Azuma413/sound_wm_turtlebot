@@ -26,7 +26,7 @@ class DrQV2Agent:
         self.timer = utils.Timer()
         self._global_step = 0
         
-        snapshot = Path.cwd() + '/weight/drqv2/run0/snapshot.pt' # 重みの保存先
+        snapshot = Path.cwd() / 'weight/drqv2/run0/snapshot.pt' # 重みの保存先
         if snapshot.exists():
             print(f'resuming: {snapshot}')
             with snapshot.open('rb') as f:

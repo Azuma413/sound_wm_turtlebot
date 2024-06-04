@@ -15,7 +15,7 @@ class DreamerV3Agent:
         config = embodied.Config(configs['defaults'])
         config = config.update(configs['medium'])
         config = config.update({
-            'logdir': Path(__file__).parent + '/weight/dreamerv3/run0', # 重みファイルの場所を指定
+            'logdir': Path(__file__).parent / 'weight/dreamerv3/run0', # 重みファイルの場所を指定
             'run.train_ratio': 64,
             'run.log_every': 30,  # Seconds
             'batch_size': 16,
