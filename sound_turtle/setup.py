@@ -24,9 +24,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-        	'control_node = sound_turtlebot.control_node:main',
-            'doa_node = sound_turtlebot.doa_node:main',
-            'wrap_node = sound_turtlebot.wrap_node:main',
+        	'control_node = sound_turtle.control_node:main',
+            'doa_node = sound_turtle.doa_node:main',
+            'wrap_node = sound_turtle.wrap_node:main',
         ],
     },
 )
