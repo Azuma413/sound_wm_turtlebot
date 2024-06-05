@@ -46,7 +46,7 @@ class WrapNode(Node):
         while not self.get_action_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('service not available, waiting again...')
         # mapの読み込み
-        yaml_path = Path.cwd() + "/my_envs/map/" + MAP_NAME + ".yaml"
+        yaml_path = Path.cwd() / "my_envs/map/" / MAP_NAME + ".yaml"
         with open(yaml_path, 'r') as file:
             map_data = yaml.safe_load(file)
             map_image = cv2.imread(Path.cwd() + "/my_envs/map/" + map_data["image"], cv2.IMREAD_GRAYSCALE)
