@@ -27,6 +27,7 @@ setup(
         	'control_node = sound_turtle.control_node:main',
             'doa_node = sound_turtle.doa_node:main',
             'wrap_node = sound_turtle.wrap_node:main',
+            'dummy_control_node = sound_turtle.dummy_control_node:main',
         ],
     },
 )
