@@ -11,8 +11,8 @@ import time
 # *************************************************************************************************
 # 定数の定義
 # *************************************************************************************************
-# device = "ReSpeaker 4 Mic Array (UAC1.0): USB Audio (hw:3,0)" # マイク4つのマイクロフォンアレイを使用
-device = "TAMAGO-03: USB Audio (hw:3,0)" # 卵型のマイクロフォンアレイを使用
+# device = "ReSpeaker 4 Mic Array (UAC1.0): USB Audio (hw:1,0)" # マイク4つのマイクロフォンアレイを使用
+device = "TAMAGO-03: USB Audio (hw:1,0)" # 卵型のマイクロフォンアレイを使用
 form_1 = pyaudio.paInt16
 chans = 8
 samp_rate = 16000
@@ -42,9 +42,9 @@ class DoaNode(Node):
         self.stream = self.audio.open(format=form_1, rate=samp_rate, channels=chans, input_device_index=index, input=True, frames_per_buffer=chunk)
         self.get_logger().info("Recording")
         radius = None
-        if device == "ReSpeaker 4 Mic Array (UAC1.0): USB Audio (hw:3,0)":
+        if device == "ReSpeaker 4 Mic Array (UAC1.0): USB Audio (hw:1,0)":
             radius = 0.065
-        elif device == "TAMAGO-03: USB Audio (hw:3,0)":
+        elif device == "TAMAGO-03: USB Audio (hw:1,0)":
             radius = 0.065
         self.mic_locs = pra.circular_2D_array(center=[0,0], M=chans, phi0=0, radius=radius)
         self.create_timer(0.1, self.timer_callback)

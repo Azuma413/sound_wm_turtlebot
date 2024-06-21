@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import pyroomacoustics as pra
 import time
 p = pyaudio.PyAudio()
-device = "ReSpeaker 4 Mic Array (UAC1.0): USB Audio (hw:3,0)"
-device2 = "TAMAGO-03: USB Audio (hw:3,0)"
+device = "ReSpeaker 4 Mic Array (UAC1.0): USB Audio (hw:1,0)"
+device2 = "TAMAGO-03: USB Audio (hw:1,0)"
 index = None
 
 for i in range(p.get_device_count()):
