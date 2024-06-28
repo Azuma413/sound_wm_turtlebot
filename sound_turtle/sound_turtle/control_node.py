@@ -29,6 +29,7 @@ from drq_util import DrQV2Agent
 # 定数の定義
 # *************************************************************************************************
 MODEL = "DreamerV3" # or "DrQ-v2"
+
 DRQ_PATH = get_package_share_directory('sound_turtle') + "/weights/best.pt"
 DREAMER_PATH = get_package_share_directory('sound_turtle') + "/weights/best.ckpt"
 # *************************************************************************************************
@@ -193,7 +194,7 @@ class ROSEnv(gym.Env):
 
     def render(self, mode='rgb_array'):
         """
-        modeで指定されたように描画もしは配列をreturnする
+        modeで指定されたように描画,もしくは配列をreturnする
         humanなら描画し, rgb_arrayならそれをreturn
         """
         # 画像の取得
