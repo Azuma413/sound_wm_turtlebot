@@ -28,7 +28,8 @@ from drq_util import DrQV2Agent
 # *************************************************************************************************
 # 定数の定義
 # *************************************************************************************************
-MODEL = "DreamerV3" # or "DrQ-v2"
+# MODEL = "DreamerV3"
+MODEL = "DrQ-v2"
 
 DRQ_PATH = get_package_share_directory('sound_turtle') + "/weights/best.pt"
 DREAMER_PATH = get_package_share_directory('sound_turtle') + "/weights/best.ckpt"

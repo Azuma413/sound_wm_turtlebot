@@ -23,7 +23,7 @@ def make_agent(obs_spec, action_spec, cfg):
 
 class Workspace:
     def __init__(self, cfg):
-        self.work_dir = Path.cwd() / 'weight/drqv2/run0' # 重みの保存先
+        self.work_dir = Path(__file__).resolve().parent / 'weight/drqv2/run0' # 重みの保存先
         print(f'workspace: {self.work_dir}')
 
         self.cfg = cfg
@@ -190,20 +190,23 @@ class Workspace:
         with snapshot.open('wb') as f:
             torch.save(payload, f)
 
-    def load_snapshot(self):
-        snapshot = self.work_dir / 'snapshot.pt'
-        if snapshot.exists():
-            print(f'resuming: {snapshot}')
-            with snapshot.open('rb') as f:
-                payload = torch.load(f)
-            for k, v in payload.items():
-                self.__dict__[k] = v
+    def load_snapshot(self, snapshot):
+        with snapshot.open('rb') as f:
+            payload = torch.load(f)
+        for k, v in payload.items():
+            self.__dict__[k] = v
 
 
 @hydra.main(config_path='my_config', config_name='drqv2')
 def main(cfg):
     workspace = Workspace(cfg)
-    workspace.load_snapshot()
+    snapshot = Path('hogehoge') #Path('/home/desktop/Document/VScode/rl_linetrace/drqv2/exp_local/2024.06.23/163843_/snapshot.pt')
+    print(snapshot)
+    if snapshot.exists():
+        print(f'resuming: {snapshot}')
+        workspace.load_snapshot(snapshot)
+    else:
+        print('snapshot dir does not exist')
     workspace.train()
 
 
