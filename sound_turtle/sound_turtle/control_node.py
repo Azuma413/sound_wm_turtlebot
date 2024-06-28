@@ -11,20 +11,12 @@ from ament_index_python.packages import get_package_share_directory
 from cv_bridge import CvBridge
 import cv2
 # その他
-import sys
 import gym
 from gym import spaces
 import numpy as np
-import pyroomacoustics as pra
-import matplotlib.pyplot as plt
-from scipy.io import wavfile
 import cv2
 import os
-import time
 from dm_env import specs
-import yaml
-from dreamer_util import DreamerV3Agent
-from drq_util import DrQV2Agent
 # *************************************************************************************************
 # 定数の定義
 # *************************************************************************************************
@@ -55,9 +47,11 @@ class ControlNode(Node):
         # 環境とagentの作成
         self.env = ROSEnv()
         if MODEL == "DrQ-v2":
+            from drq_util import DrQV2Agent
             self.env = WrapDrQ(self.env)
             self.agent = DrQV2Agent(self.env) # DrQ-v2のエージェントを作成 いったん保留
         elif MODEL == "DreamerV3":
+            from dreamer_util import DreamerV3Agent
             self.agent = DreamerV3Agent(self.env) # DreamerV3のエージェントを作成
             
     def image_callback(self, msg):

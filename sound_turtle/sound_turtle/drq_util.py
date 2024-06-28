@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import hydra
 import torch
-import utils
+import drqv2.utils as utils
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 os.environ['MKL_SERVICE_FORCE_INTEL'] = '1'
 os.environ['MUJOCO_GL'] = 'egl'
