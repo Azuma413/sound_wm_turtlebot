@@ -31,6 +31,9 @@ experiment: exp
 lr: 1e-4
 feature_dim: 50
 
+# エラー回避のために追加
+stddev_schedule: 0.1
+
 agent:
   _target_: drqv2.drqv2.DrQV2Agent
   obs_shape: ??? # to be specified later

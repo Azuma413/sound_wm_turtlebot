@@ -41,14 +41,15 @@ class WrapNode(Node):
         self.get_action_cli = self.create_client(GetAction, 'get_action')
         self.goal_pose_pub = self.create_publisher(PoseStamped, 'goal_pose', 10) # navigationの目標位置を送信するためのpublisher
         self.bridge = CvBridge() # OpenCVとROSの画像を変換するためのクラス
+        self.rate = self.create_rate(2, self.get_clock()) # 2Hzで実行
         # get_actionサーバーが立ち上がるまで待機
         while not self.get_action_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('service not available, waiting again...')
         # mapの読み込み
-        yaml_path = Path.cwd() / "my_envs/map/" / MAP_NAME + ".yaml"
+        yaml_path = Path.cwd() / "my_envs/map" / (MAP_NAME + ".yaml")
         with open(yaml_path, 'r') as file:
             map_data = yaml.safe_load(file)
-            map_image = cv2.imread(Path.cwd() / "my_envs/map/" / map_data["image"], cv2.IMREAD_GRAYSCALE)
+            map_image = cv2.imread(str(Path.cwd() / "my_envs/map" / map_data["image"]), cv2.IMREAD_GRAYSCALE)
             self.resolution = map_data["resolution"] # 1pixelあたりのメートル数
             self.origin = np.array(map_data["origin"]) # mapの右下の隅のpose
         # 保存用の変数
@@ -63,7 +64,7 @@ class WrapNode(Node):
         # データが揃うまで待機
         while self.spatial_resp is None or self.field_map is None or self.robot_pose is None:
             print('waiting...')
-            rclpy.sleep(1)
+            self.rate.sleep()
         print('start')
 
     def loop(self):
@@ -103,7 +104,7 @@ class WrapNode(Node):
         sound_map.data = (self.image[:,:,0]).astype(np.int8).reshape(-1).tolist()
         self.sound_map_pub.publish(sound_map)
         # 5. 0.5秒待機
-        rclpy.sleep(0.5)
+        self.rate.sleep()
         # 6. 行動の取得
         action = self.get_action()
         # 7. 行動の送信

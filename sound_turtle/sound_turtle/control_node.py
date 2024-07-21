@@ -47,9 +47,9 @@ class ControlNode(Node):
         # 環境とagentの作成
         self.env = ROSEnv()
         if MODEL == "DrQ-v2":
-            from drq_util import DrQV2Agent
+            from drq_util import DrQAgent
             self.env = WrapDrQ(self.env)
-            self.agent = DrQV2Agent(self.env) # DrQ-v2のエージェントを作成 いったん保留
+            self.agent = DrQAgent(self.env) # DrQ-v2のエージェントを作成 いったん保留
         elif MODEL == "DreamerV3":
             from dreamer_util import DreamerV3Agent
             self.agent = DreamerV3Agent(self.env) # DreamerV3のエージェントを作成
@@ -65,8 +65,8 @@ class ControlNode(Node):
         行動を取得するサービスのコールバック関数
         """
         self.agent.action() # エージェントを動かす
-        response.action0 = self.env.get_action()[0]
-        response.action1 = self.env.get_action()[1]
+        response.action0 = float(self.env.get_action()[0])
+        response.action1 = float(self.env.get_action()[1])
         return response
 
 class WrapDrQ(gym.Env):
@@ -124,7 +124,7 @@ class ROSEnv(gym.Env):
         self.save_video = True
         self.estimated_sound_location = []
         self.render_size = 480
-        self.obs = None # 観測データを格納する変数
+        self.obs = np.zeros((self.image_size,self.image_size,3))
         self.aciton = None # 行動データを格納する変数
 
     def reset(self, seed=None, options=None):
@@ -140,7 +140,7 @@ class ROSEnv(gym.Env):
             self.image_list = []
             img = self.render()
             self.image_list.append(img)
-        return obs
+        return obs.astype(np.float32)
 
     def step(self, action):
         """
@@ -185,7 +185,7 @@ class ROSEnv(gym.Env):
                     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
                     out.write(image)
                 out.release()
-        return obs, reward, done, info
+        return obs.astype(np.float32), reward, done, info
 
     def render(self, mode='rgb_array'):
         """

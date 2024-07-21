@@ -29,6 +29,7 @@ class Workspace:
         self.cfg = cfg
         utils.set_seed_everywhere(cfg.seed)
         self.device = torch.device(cfg.device)
+        
         self.setup()
 
         self.agent = make_agent(self.train_env.observation_spec(),
@@ -197,7 +198,7 @@ class Workspace:
             self.__dict__[k] = v
 
 
-@hydra.main(config_path='my_config', config_name='drqv2')
+@hydra.main(config_path='my_config', config_name='drqv2', version_base='1.1')
 def main(cfg):
     workspace = Workspace(cfg)
     snapshot = Path('hogehoge') #Path('/home/desktop/Document/VScode/rl_linetrace/drqv2/exp_local/2024.06.23/163843_/snapshot.pt')
