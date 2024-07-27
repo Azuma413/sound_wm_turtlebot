@@ -21,10 +21,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     map_dir = LaunchConfiguration(
         'map',
-        default=os.path.join(
-            get_package_share_directory('turtlebot3_navigation2'),
-            'map',
-            'map.yaml'))
+        default=os.path.join(get_package_share_directory('sound_turtle'), 'sound_turtle', 'my_envs', 'map', '327.yaml'))
 
     param_file_name = TURTLEBOT3_MODEL + '.yaml'
     param_dir = LaunchConfiguration(
@@ -65,23 +62,29 @@ def generate_launch_description():
                 'params_file': param_dir}.items(),
         ),
 
-        Node(
-            package='rviz2',
-            executable='rviz2',
-            name='rviz2',
-            arguments=['-d', rviz_config_dir],
-            parameters=[{'use_sim_time': use_sim_time}],
-            output='screen'),
+        # Node(
+        #     package='rviz2',
+        #     executable='rviz2',
+        #     name='rviz2',
+        #     arguments=['-d', rviz_config_dir],
+        #     parameters=[{'use_sim_time': use_sim_time}],
+        #     output='screen'),
+        # Node(
+        #     package="sound_turtle",
+        #     executable="control_node",
+        #     name="control_node",
+        #     output="screen",
+        # ),
         Node(
             package="sound_turtle",
-            executable="control_node",
+            executable="dummy_control_node",
             name="control_node",
             output="screen",
         ),
-        Node(
-            package="sound_turtle",
-            executable="wrap_node",
-            name="wrap_node",
-            output="screen",
-        ),
+        # Node(
+        #     package="sound_turtle",
+        #     executable="wrap_node",
+        #     name="wrap_node",
+        #     output="screen",
+        # ),
     ])
