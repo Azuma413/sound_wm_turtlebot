@@ -179,12 +179,12 @@ ros2 launch turtlebot3_bringup robot.launch.py
 ```
 ros2 launch turtlebot3_cartographer cartographer.launch.py
 ```
-- ターミナル3
+- ターミナル3  
 配列をqwertyにすること。
 ```
 ros2 run turtlebot3_teleop teleop_keyboard
 ```
-- ターミナル4
+- ターミナル4  
 十分にマップを作成することができたら実行すること。
 ```
 ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/sound_turtlebot/sound_turtle/sound_turtle/my_envs/map/main
