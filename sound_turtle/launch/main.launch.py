@@ -81,10 +81,10 @@ def generate_launch_description():
             name="control_node",
             output="screen",
         ),
-        # Node(
-        #     package="sound_turtle",
-        #     executable="wrap_node",
-        #     name="wrap_node",
-        #     output="screen",
-        # ),
+        Node(
+            package="sound_turtle",
+            executable="wrap_node",
+            name="wrap_node",
+            output="screen",
+        ),
     ])

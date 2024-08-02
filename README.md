@@ -187,7 +187,7 @@ ros2 run turtlebot3_teleop teleop_keyboard
 - ターミナル4
 十分にマップを作成することができたら実行すること。
 ```
-ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/sound_turtlebotmap/sound_turtle/sound_turtle/my_envs/map/main
+ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/sound_turtlebot/sound_turtle/sound_turtle/my_envs/map/main
 ```
 # メインプログラムの実行
 - ターミナル１

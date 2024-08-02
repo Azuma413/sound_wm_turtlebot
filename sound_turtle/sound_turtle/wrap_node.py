@@ -62,7 +62,7 @@ class WrapNode(Node):
         self.image[:,:,1] = 255 - map_image # Gチャンネルの値を初期化
         self.image[map_image == 205, 1] = 255 # 未知の領域を255にする
         # データが揃うまで待機
-        while self.spatial_resp is None or self.field_map is None or self.robot_pose is None:
+        while self.spatial_resp is None or self.robot_pose is None:
             print('waiting...')
             self.rate.sleep()
         print('start')
