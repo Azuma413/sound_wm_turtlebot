@@ -13,6 +13,7 @@ import os
 import time
 from dm_env import specs
 import yaml
+import wandb
 
 class WrapDrQ(gym.Env):
     def __init__(self, env):
@@ -46,7 +47,7 @@ class MySimulator:
             self.map_image = cv2.imread(os.path.dirname(os.path.abspath(__file__)) + "/map/" + map_data["image"], cv2.IMREAD_GRAYSCALE)
             
             # 4倍にリサイズ（本番は削除すること）
-            self.map_image = cv2.resize(self.map_image, (self.map_image.shape[1]*4, self.map_image.shape[0]*4), interpolation=cv2.INTER_NEAREST)
+            # self.map_image = cv2.resize(self.map_image, (self.map_image.shape[1]*4, self.map_image.shape[0]*4), interpolation=cv2.INTER_NEAREST)
             
             self.resolution = map_data["resolution"] # 1pixelあたりのメートル数
             self.origin = np.array(map_data["origin"]) # mapの右下の隅のpose
@@ -181,7 +182,7 @@ class MyEnv(gym.Env):
         self.max_episode_steps = 100 # 50
         self.episode_count = 0
         self.confidence_threshold = 0.7 # 音源の存在確率がこの値を超えたら音源が存在すると判定
-        self.map_name = "327"
+        self.map_name = "main"
         # ロボットの軌跡
         self.trajectory = []
         # 画像のリスト
@@ -278,29 +279,33 @@ class MyEnv(gym.Env):
             img = self.render()
             self.image_list.append(img)
             # 終了時に動画を保存
-            if done or truncateds: 
-                # image_listをmp4に変換して保存
-                fourcc = cv2.VideoWriter.fourcc(*'mp4v')
-                current_dir = os.path.dirname(os.path.abspath(__file__))
-                path = f"video/video"
-                path = os.path.join(current_dir, path) # 絶対pathに変換
-                if not os.path.exists(path):
-                    os.makedirs(path)
-                i = 0
-                while True:
-                    filename = f'trajectory{i}.mp4'
-                    filename = os.path.join(path, filename) # 絶対pathに変換
-                    if os.path.exists(filename):
-                        i += 1
-                        continue
-                    else:
-                        out = cv2.VideoWriter(filename, fourcc, 8.0, (img.shape[0], img.shape[1]))
-                        break
-                for image in self.image_list:
-                    # RGBからBGRに変換
-                    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-                    out.write(image)
-                out.release()
+            if done or truncateds:
+                video = np.array(self.image_list)
+                # THWC -> TCHW
+                video = video.transpose(0,3,1,2)
+                wandb.log({"video": wandb.Video(video)})
+                # # image_listをmp4に変換して保存
+                # fourcc = cv2.VideoWriter.fourcc(*'mp4v')
+                # current_dir = os.path.dirname(os.path.abspath(__file__))
+                # path = f"video/video"
+                # path = os.path.join(current_dir, path) # 絶対pathに変換
+                # if not os.path.exists(path):
+                #     os.makedirs(path)
+                # i = 0
+                # while True:
+                #     filename = f'trajectory{i}.mp4'
+                #     filename = os.path.join(path, filename) # 絶対pathに変換
+                #     if os.path.exists(filename):
+                #         i += 1
+                #         continue
+                #     else:
+                #         out = cv2.VideoWriter(filename, fourcc, 8.0, (img.shape[0], img.shape[1]))
+                #         break
+                # for image in self.image_list:
+                #     # RGBからBGRに変換
+                #     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+                #     out.write(image)
+                # out.release()
         return obs, reward, done, info
 
     def render(self, mode='rgb_array'):

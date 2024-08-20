@@ -10,11 +10,14 @@ from drqv2.logger import Logger
 from drqv2.replay_buffer import ReplayBufferStorage, make_replay_loader
 from drqv2.video import TrainVideoRecorder, VideoRecorder
 from my_envs.my_env import MyEnv, WrapDrQ
+import wandb
 
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 os.environ['MKL_SERVICE_FORCE_INTEL'] = '1'
 os.environ['MUJOCO_GL'] = 'egl'
 torch.backends.cudnn.benchmark = True
+
+name = 'drqv2/run0'
 
 def make_agent(obs_spec, action_spec, cfg):
     cfg.obs_shape = obs_spec.shape
@@ -23,7 +26,7 @@ def make_agent(obs_spec, action_spec, cfg):
 
 class Workspace:
     def __init__(self, cfg):
-        self.work_dir = Path(__file__).resolve().parent / 'weight/drqv2/run0' # 重みの保存先
+        self.work_dir = Path(__file__).resolve().parent / 'weight' / name # 重みの保存先
         print(f'workspace: {self.work_dir}')
 
         self.cfg = cfg
@@ -108,7 +111,7 @@ class Workspace:
 
             episode += 1
             self.video_recorder.save(f'{self.global_frame}.mp4')
-
+        wandb.log({"eval/score":total_reward / episode, "eval/length":step * self.cfg.action_repeat / episode})
         with self.logger.log_and_dump_ctx(self.global_frame, ty='eval') as log:
             log('episode_reward', total_reward / episode)
             log('episode_length', step * self.cfg.action_repeat / episode)
@@ -139,8 +142,8 @@ class Workspace:
                     # log stats
                     elapsed_time, total_time = self.timer.reset()
                     episode_frame = episode_step * self.cfg.action_repeat
-                    with self.logger.log_and_dump_ctx(self.global_frame,
-                                                      ty='train') as log:
+                    wandb.log({"train/score":episode_reward, "train/length":episode_frame})
+                    with self.logger.log_and_dump_ctx(self.global_frame,ty='train') as log:
                         log('fps', episode_frame / elapsed_time)
                         log('total_time', total_time)
                         log('episode_reward', episode_reward)
@@ -198,8 +201,9 @@ class Workspace:
             self.__dict__[k] = v
 
 
-@hydra.main(config_path='my_config', config_name='drqv2', version_base='1.1')
+@hydra.main(config_path='my_config', config_name='drqv2')
 def main(cfg):
+    wandb.init(project='sound_turtle', group='drqv2', name=name)
     workspace = Workspace(cfg)
     snapshot = Path('hogehoge') #Path('/home/desktop/Document/VScode/rl_linetrace/drqv2/exp_local/2024.06.23/163843_/snapshot.pt')
     print(snapshot)

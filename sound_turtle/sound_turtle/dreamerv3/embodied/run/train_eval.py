@@ -1,5 +1,5 @@
 import re
-
+import wandb
 import embodied
 import numpy as np
 
@@ -32,6 +32,7 @@ def train_eval(
   def per_episode(ep, mode):
     length = len(ep['reward']) - 1
     score = float(ep['reward'].astype(np.float64).sum())
+    wandb.log({mode+"/score":score, mode+"/length":length})
     logger.add({
         'length': length, 'score': score,
         'reward_rate': (ep['reward'] - ep['reward'].min() >= 0.1).mean(),

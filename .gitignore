@@ -1,4 +1,5 @@
 weight
 video
 exp_local
-__pycache__
+**/__pycache__/
+wandb/
