@@ -45,15 +45,14 @@ class MySimulator:
         with open(yaml_path, 'r') as file:
             map_data = yaml.safe_load(file)
             self.map_image = cv2.imread(os.path.dirname(os.path.abspath(__file__)) + "/map/" + map_data["image"], cv2.IMREAD_GRAYSCALE)
-            
             # 4倍にリサイズ（本番は削除すること）
             # self.map_image = cv2.resize(self.map_image, (self.map_image.shape[1]*4, self.map_image.shape[0]*4), interpolation=cv2.INTER_NEAREST)
-            
             self.resolution = map_data["resolution"] # 1pixelあたりのメートル数
             self.origin = np.array(map_data["origin"]) # mapの右下の隅のpose
         # シミュレーションの設定
         # map特有の設定
-        free_space_pos = np.array([0.4, 0.55])
+        sound_base_pos = np.array([0.5, 0.5])
+        robot_base_pos = np.array([0.28, 0.2])
         # 観測の設定
         self.image = np.zeros((self.map_image.shape[0], self.map_image.shape[1], 3), dtype=np.float32) # 画像を格納する配列 (R:音源の存在確率, G:map, B:robot) 0-255
         self.image[:,:,0] = 255*threshold # Rチャンネルの値を初期化
@@ -62,7 +61,9 @@ class MySimulator:
         self.image[self.map_image == 205, 1] = 255
         # 音源の位置
         sound_height = 1.3
-        self.sound_locations_2d = self.pixel2coord(self.map_image.shape*free_space_pos) + 0.3*np.array(sound_locations) # 音源の位置
+        sound_range = 0. #1.6
+        robot_range = 0.3
+        self.sound_locations_2d = self.pixel2coord(self.map_image.shape*sound_base_pos) + sound_range*np.array(sound_locations) # 音源の位置
         self.sound_locations = np.array([np.array([self.sound_locations_2d[0][0], self.sound_locations_2d[0][1], sound_height])])
         # self.sound_locations = np.concatenate([self.sound_locations_2d, sound_height * np.ones((len(self.sound_locations_2d), 1))], axis=1)
         use_original_sound = False # Trueなら音源をそのまま使う。Falseならランダムな音源を生成する。 
@@ -73,17 +74,34 @@ class MySimulator:
         else:
             self.audio = np.random.randn(16000)
         # ロボットの初期設定
-        self.center = self.pixel2coord(self.map_image.shape*free_space_pos) + 0.2*np.array(robot_pos) # ロボットの初期位置
+        self.center = self.pixel2coord(self.map_image.shape*robot_base_pos) + robot_range*np.array(robot_pos) # ロボットの初期位置
         self.robot_height = 0.3 # ロボットの高さ
         self.move_range = 0.2 # ロボットの移動範囲[m]
         self.mic_num = 8 # マイクロフォンアレイの数
-        while(not self.update_robot_pos([0.0, 0.0])): # 失敗したら設定しなおす
-            robot_pos = np.random.rand(2).tolist()
-            self.center = self.pixel2coord(self.map_image.shape*free_space_pos) + 0.2*np.array(robot_pos)
+        # while(not self.update_robot_pos([0.0, 0.0])): # 失敗したら設定しなおす
+        #     robot_pos = np.random.rand(2).tolist()
+        #     self.center = self.pixel2coord(self.map_image.shape*free_space_pos) + range*np.array(robot_pos)
         # 部屋の形状はmapデータを参照して適切に決める。音の反響はある程度割り切る。
-        room_dim0 = self.pixel2coord(self.map_image.shape) # 部屋の大まかな寸法
-        room_dim1 = self.pixel2coord([0, 0])
-        self.corners = np.array([room_dim1, [room_dim0[0],room_dim1[1]], room_dim0, [room_dim1[0],room_dim0[1]]])  # [x,y] 壁がない部屋
+        self.use_strict_room = True
+        if self.use_strict_room:
+            x = 12
+            room_data = [[0,1.438],[0,2.368],[1,2.368],[1,3.438],[1.69,3.438],[1.69,4.3],[x,4.3],[x,0],[4.155,0],[4.155,1.438]]
+            theta = 180 #-140
+            theta = theta*np.pi/180
+            rot_mat = np.array([[np.cos(theta), -np.sin(theta)],[np.sin(theta),np.cos(theta)]])
+            room_data = np.array(room_data)
+            room_data -= np.array([max(room_data[0])/2, max(room_data[1])/2])
+            self.corners = np.dot(rot_mat, room_data.T).T
+            self.corners = self.corners[:, ::-1]
+            linear_motion = np.array([4,6])
+            # linear_motion = np.array([7.5,3])
+            self.corners += linear_motion
+        else:
+            room_dim0 = self.pixel2coord(self.map_image.shape) # 部屋の大まかな寸法
+            room_dim1 = self.pixel2coord([0, 0])
+            self.corners = np.array([room_dim1, [room_dim0[0],room_dim1[1]], room_dim0, [room_dim1[0],room_dim0[1]]])  # [x,y] 壁がない部屋
+        print(self.sound_locations_2d)
+        print(self.corners)
         self.height = 3. # 天井の高さ
     
     def coord2pixel(self, coord):
@@ -207,8 +225,8 @@ class MyEnv(gym.Env):
         self.estimated_sound_location = []
         self.move_result = True
         # ロボットの初期位置と音源の位置をランダムに設定
-        robot_pos = np.random.rand(2).tolist()
-        sound_locations = np.random.rand(1, 2).tolist()
+        robot_pos = (np.random.rand(2)*2 - 1).tolist()
+        sound_locations = (np.random.rand(1, 2)*2 - 1).tolist()
         # シミュレータの初期化
         self.my_sim = MySimulator(map_name=self.map_name, robot_pos=robot_pos, sound_locations=sound_locations, threshold=self.confidence_threshold)
         # シミュレーションの実行
@@ -339,19 +357,26 @@ class MyEnv(gym.Env):
         contours, _ = cv2.findContours(bin_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE) # 輪郭抽出
         cv2.drawContours(img, contours, -1, (255, 255, 0), 1) # 輪郭を描画
         # ロボットの軌跡を描画
-        for i in range(len(self.trajectory) - 1):
-            p1 = (np.array(self.trajectory[i])*scale).astype(np.int32)
-            p2 = (np.array(self.trajectory[i+1])*scale).astype(np.int32)
-            cv2.line(img, tuple(p1[::-1]), tuple(p2[::-1]), (0, 200, 200), 1)
+        # for i in range(len(self.trajectory) - 1):
+        #     p1 = (np.array(self.trajectory[i])*scale).astype(np.int32)
+        #     p2 = (np.array(self.trajectory[i+1])*scale).astype(np.int32)
+        #     cv2.line(img, tuple(p1[::-1]), tuple(p2[::-1]), (0, 200, 200), 1)
         # 現在の音源の推定位置を描画
         if len(self.estimated_sound_location) > 0:
             # self.estimated_sound_locationをndarrayのintに変換
             point = (np.array(self.estimated_sound_location[-1])*scale).astype(np.int32)
-            cv2.circle(img, (point[::-1]), 5, (255, 200, 100), -1)
-        for i in range(len(self.estimated_sound_location) - 1):
-            p1 = (self.estimated_sound_location[i]*scale).astype(np.int32)
-            p2 = (self.estimated_sound_location[i+1]*scale).astype(np.int32)
-            cv2.line(img, tuple(p1[::-1]), tuple(p2[::-1]), (255, 200, 100), 1)
+            cv2.circle(img, (point[::-1]), 5, (255, 255, 0), -1)
+        # for i in range(len(self.estimated_sound_location) - 1):
+        #     p1 = (self.estimated_sound_location[i]*scale).astype(np.int32)
+        #     p2 = (self.estimated_sound_location[i+1]*scale).astype(np.int32)
+        #     cv2.line(img, tuple(p1[::-1]), tuple(p2[::-1]), (255, 200, 100), 1)
+        # self.my_sim.cornersを描画
+        img_corners = []
+        for corner in self.my_sim.corners:
+            x, y = self.my_sim.coord2pixel(corner)*scale
+            img_corners.append([x, y])
+        img_corners = np.array(img_corners).astype(np.int32)
+        cv2.drawContours(img, [img_corners], -1, (255, 0, 255), 2)
         # 報酬を描画
         font = cv2.FONT_HERSHEY_SIMPLEX
         fontScale = 1

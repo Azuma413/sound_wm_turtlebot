@@ -5,7 +5,9 @@ def main():
   from dreamerv3 import embodied
   from pathlib import Path
   warnings.filterwarnings('ignore', '.*truncated to dtype int32.*')
-  name = "dreamerv3/run0"
+
+  name = "dreamerv3/run1"
+
   wandb.init(project='sound_turtle', group='dreamerv3', name=name)
   config = embodied.Config(dreamerv3.configs['defaults'])
   config = config.update(dreamerv3.configs['medium'])
