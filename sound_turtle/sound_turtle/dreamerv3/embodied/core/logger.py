@@ -5,7 +5,7 @@ import json
 import os
 import re
 import time
-
+import wandb
 import numpy as np
 
 from . import path
@@ -214,6 +214,9 @@ class TensorBoardOutput(AsyncOutput):
     name = name if isinstance(name, str) else name.decode('utf-8')
     if np.issubdtype(video.dtype, np.floating):
       video = np.clip(255 * video, 0, 255).astype(np.uint8)
+    if name == "eval/openl_image":
+      wandb_video = video.transpose(0,3,1,2)
+      wandb.log({"openl_image": wandb.Video(wandb_video)})
     try:
       T, H, W, C = video.shape
       summary = tf1.Summary()
@@ -231,13 +234,13 @@ class WandBOutput:
   def __init__(self, pattern, logdir, config):
     self._pattern = re.compile(pattern)
     import wandb
-    wandb.init(
-        project="dreamerv3",
-        name=logdir.name,
-        # sync_tensorboard=True,,
-        entity='word-bots',
-        config=dict(config),
-    )
+    # wandb.init(
+    #     project="dreamerv3",
+    #     name=logdir.name,
+    #     # sync_tensorboard=True,,
+    #     entity='word-bots',
+    #     config=dict(config),
+    # )
     self._wandb = wandb
 
   def __call__(self, summaries):

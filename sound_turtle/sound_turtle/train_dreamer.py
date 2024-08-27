@@ -27,11 +27,11 @@ def main():
   logdir = embodied.Path(config.logdir)
   step = embodied.Counter()
   logger = embodied.Logger(step, [
-      embodied.logger.TerminalOutput(),
-      embodied.logger.JSONLOutput(logdir, 'metrics.jsonl'),
+      # embodied.logger.TerminalOutput(),
+      # embodied.logger.WandBOutput(r'.*', logdir, config),
+      # embodied.logger.JSONLOutput(logdir, 'metrics.jsonl'),
       embodied.logger.TensorBoardOutput(logdir),
   ])
-
   from dreamerv3.embodied.envs import from_gym
   from my_envs.my_env import MyEnv # add
   train_env = MyEnv()

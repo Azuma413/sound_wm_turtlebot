@@ -122,4 +122,3 @@ def train_eval(
     if should_save(step):
       checkpoint.save()
   logger.write()
-  logger.write()
