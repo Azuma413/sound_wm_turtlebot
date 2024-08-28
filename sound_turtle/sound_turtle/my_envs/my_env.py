@@ -15,6 +15,8 @@ from dm_env import specs
 import yaml
 import wandb
 
+global_count = 0
+
 class WrapDrQ(gym.Env):
     def __init__(self, env):
         self.env = env
@@ -47,6 +49,12 @@ class MySimulator:
             self.map_image = cv2.imread(os.path.dirname(os.path.abspath(__file__)) + "/map/" + map_data["image"], cv2.IMREAD_GRAYSCALE)
             self.resolution = map_data["resolution"] # 1pixelあたりのメートル数
             self.origin = np.array(map_data["origin"]) # mapの右下の隅のpose
+        use_random_obstacle = True # マップにランダムな障害物を追加するかどうか。
+        if use_random_obstacle:
+            max_obstacle_size = 5 # 障害物の最大サイズ（ピクセル）
+            obstacle_size = np.random.randint(1, max_obstacle_size + 1, size=2)
+            position = np.random.randint([self.map_image.shape[1]/4, self.map_image.shape[0]/4], [self.map_image.shape[1]*3/4, self.map_image.shape[0]*3/4])
+            self.map_image[position[1]:position[1] + obstacle_size[1], position[0]:position[0] + obstacle_size[0]] = 0
         # シミュレーションの設定
         # map特有の設定
         self.sound_base_pos = np.array([0.55, 0.5])
@@ -131,8 +139,8 @@ class MySimulator:
         else:
             step = np.abs(diff[1])
         for i in range(step):
-            x = int(start[0] + i*diff[0]/step)
-            y = int(start[1] + i*diff[1]/step)
+            x = int(start[0] + i*diff[0]/step) + 1
+            y = int(start[1] + i*diff[1]/step) + 1
             if self.map_image[x, y] < 210: # 0は障害物，205は未知の領域
                 return False
         self.center = new_center
@@ -172,9 +180,9 @@ class MySimulator:
         point_angles = np.arctan2(points[:,0] - robot_pixel[0], points[:,1] - robot_pixel[1])*180/np.pi + 180
         point_angles = (point_angles + 360) % 360
         for i, point_angle in enumerate(point_angles):
-            shift_value = 0.4 # 値を大きくするほど，確率分布が収束しにくくなる
+            shift_value = 0.3 #0.4 # 値を大きくするほど，確率分布が収束しにくくなる
             self.image[points[i,0], points[i,1], 0] *= max(spatial_resp[int(point_angle)] + shift_value, 0.95) # ピーキーな値の変動を抑える
-        self.image[:,:,0] += 0.1 # 値が小さくなりすぎると更新が上手くいかなくなる
+        self.image[:,:,0] += 0.08 #0.1 # 値が小さくなりすぎると更新が上手くいかなくなる
         self.image[self.image < 0] = 0.0
         self.image[self.image > 255] = 255.0 
         
@@ -215,12 +223,15 @@ class MyEnv(gym.Env):
         self.render_size = 480
         self.mark_corner = False # 部屋の形状をrenderに表示するか。
         self.done_when_hit_wall = False # 壁に当たったときにエピソードを終了するか。
+        self.log_video_step = 50 # 何エピソードごとにログを取るか。
 
     def reset(self, seed=None, options=None):
         """
         環境を初期状態にして初期状態(state)の観測(observation)をreturnする
         """
         # 変数の初期化
+        global global_count
+        global_count += 1
         self.episode_count = 0
         self.reward_value = 0
         self.reward_sum = 0
@@ -266,27 +277,29 @@ class MyEnv(gym.Env):
         # 観測の取得
         obs = self.my_sim.image/255.0
         # 報酬の計算
+        # 音源の位置の存在確率分布が収束度合に応じて報酬を与える
+        n = np.sum(obs[:,:,0] < self.confidence_threshold)
+        pixel_num = obs.shape[0]*obs.shape[1]
+        x = 3 # tanhの定義域をどれだけシフトさせるか
+        reward = np.tanh(4*(n - pixel_num*3/4)/(pixel_num/4)-x)*self.distribution_reward_weight
+        # print("分布報酬：",np.tanh(4*(n - pixel_num*3/4)/(pixel_num/4)-x))
+        # 推定された音源位置と真の位置の差に応じて報酬を与える
+        points = np.argwhere(obs[:,:,0] > self.confidence_threshold) # 2次元配列のTrueの要素のインデックスを返す
+        if len(points) == 0: # 音源を見失っていた場合は罰則を与える
+            reward = -1.0
+        else:
+            # 見失っていなければ，音源との距離に応じた報酬を与える
+            point = np.mean(points, axis=0)
+            map_point = self.my_sim.pixel2coord(point)
+            self.estimated_sound_location.append(point)
+            sound_loc = self.my_sim.sound_locations_2d
+            y = 0.3 # 大きいほど報酬が厳しくなる。
+            reward += (2*np.exp(-np.linalg.norm(map_point - sound_loc)*y) - 1)*(1-self.distribution_reward_weight)
+            # print("推定報酬：",2*np.exp(-np.linalg.norm(map_point - sound_loc)*y) - 1)
+
         if self.move_result == False:
             reward = -1.
             done = True if self.done_when_hit_wall else False
-        else:
-            # 音源の位置の存在確率分布が収束度合に応じて報酬を与える
-            n = np.sum(obs[:,:,0] < self.confidence_threshold)
-            pixel_num = obs.shape[0]*obs.shape[1]
-            x = 2 # tanhの定義域をどれだけシフトさせるか
-            reward = np.tanh(4*(n - pixel_num*3/4)/(pixel_num/4)-x)*self.distribution_reward_weight
-            
-            # 推定された音源位置と真の位置の差に応じて報酬を与える
-            points = np.argwhere(obs[:,:,0] > self.confidence_threshold) # 2次元配列のTrueの要素のインデックスを返す
-            if len(points) == 0: # 音源を見失っていた場合は罰則を与える
-                reward = -1.0
-            else:
-                # 見失っていなければ，音源との距離に応じた報酬を与える
-                point = np.mean(points, axis=0)
-                map_point = self.my_sim.pixel2coord(point)
-                self.estimated_sound_location.append(point)
-                sound_loc = np.mean(self.my_sim.sound_locations_2d)
-                reward += (2*np.exp(-np.linalg.norm(map_point - sound_loc)*1.0) - 1)*(1-self.distribution_reward_weight) # 1.0はスケール
 
         if self.episode_count >= self.max_episode_steps:
             done = True
@@ -296,7 +309,7 @@ class MyEnv(gym.Env):
         self.reward_value = reward
         self.reward_sum += reward
         # 画像の保存
-        if self.save_video:
+        if self.save_video and (global_count % self.log_video_step == 0):
             img = self.render()
             self.image_list.append(img)
             # 終了時に動画を保存

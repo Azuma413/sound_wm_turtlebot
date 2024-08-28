@@ -10,6 +10,8 @@ import numpy as np
 
 from . import path
 
+global_count = 0
+log_video_step = 50
 
 class Logger:
 
@@ -209,14 +211,17 @@ class TensorBoardOutput(AsyncOutput):
     return tf.io.gfile.stat(sorted(events)[-1]).length if events else 0
 
   def _video_summary(self, name, video, step):
+    global global_count
     import tensorflow as tf
     import tensorflow.compat.v1 as tf1
     name = name if isinstance(name, str) else name.decode('utf-8')
     if np.issubdtype(video.dtype, np.floating):
       video = np.clip(255 * video, 0, 255).astype(np.uint8)
     if name == "eval/openl_image":
-      wandb_video = video.transpose(0,3,1,2)
-      wandb.log({"openl_image": wandb.Video(wandb_video)})
+      if global_count % log_video_step == 0:
+        wandb_video = video.transpose(0,3,1,2)
+        wandb.log({"openl_image": wandb.Video(wandb_video)})
+      global_count += 1
     try:
       T, H, W, C = video.shape
       summary = tf1.Summary()
