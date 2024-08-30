@@ -202,11 +202,11 @@ class MyEnv(gym.Env):
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
         self.image_size = 128
         self.observation_space = spaces.Box(low=0, high=1.0, shape=(self.image_size, self.image_size, 3), dtype=np.float32)
-        self.reward_range = [-5., 5.]
+        self.reward_range = [-1., 1.]
         self.my_sim = None
         # 確率範囲の絞り込みに対する報酬の重み(音源の位置を正しく推定する事への報酬の重みは，1からこの値を引いたものになる)
         self.distribution_reward_weight = 0.4
-        self.max_episode_steps = 100 # 50
+        self.max_episode_steps = 100
         self.episode_count = 0
         self.confidence_threshold = 0.7 # 音源の存在確率がこの値を超えたら音源が存在すると判定
         self.map_name = "main"
@@ -222,7 +222,7 @@ class MyEnv(gym.Env):
         self.move_result = True
         self.render_size = 480
         self.mark_corner = False # 部屋の形状をrenderに表示するか。
-        self.done_when_hit_wall = False # 壁に当たったときにエピソードを終了するか。
+        self.done_when_hit_wall = True # 壁に当たったときにエピソードを終了するか。
         self.log_video_step = 50 # 何エピソードごとにログを取るか。
 
     def reset(self, seed=None, options=None):
@@ -300,7 +300,6 @@ class MyEnv(gym.Env):
         if self.move_result == False:
             reward = -1.
             done = True if self.done_when_hit_wall else False
-
         if self.episode_count >= self.max_episode_steps:
             done = True
             
