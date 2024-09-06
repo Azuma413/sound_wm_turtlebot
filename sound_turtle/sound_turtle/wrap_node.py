@@ -21,6 +21,7 @@ import numpy as np
 import os
 import yaml
 from pathlib import Path
+import time
 # *************************************************************************************************
 # 定数の定義
 # *************************************************************************************************
@@ -41,7 +42,7 @@ class WrapNode(Node):
         self.get_action_cli = self.create_client(GetAction, 'get_action')
         self.goal_pose_pub = self.create_publisher(PoseStamped, 'goal_pose', 10) # navigationの目標位置を送信するためのpublisher
         self.bridge = CvBridge() # OpenCVとROSの画像を変換するためのクラス
-        self.rate = self.create_rate(2, self.get_clock()) # 2Hzで実行
+        self.rate = 2 # Hz 制御周期
         # get_actionサーバーが立ち上がるまで待機
         while not self.get_action_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('service not available, waiting again...')
@@ -64,10 +65,11 @@ class WrapNode(Node):
         # データが揃うまで待機
         while self.spatial_resp is None or self.robot_pose is None:
             print('waiting...')
-            self.rate.sleep()
+            time.sleep(1)
         print('start')
 
     def loop(self):
+        start_time = time.time()
         # 1. spatial_respをRチャンネルに描画
         points = np.array(np.meshgrid(np.arange(self.image.shape[0]), np.arange(self.image.shape[1]))).T.reshape(-1, 2) # 画像上の各pixelのマイクロフォンアレイからの角度を計算してanglesに格納
         point_angles = np.arctan2(points[:,0] - robot_pos[0], points[:,1] - robot_pos[1])*180/np.pi + 180
@@ -103,17 +105,21 @@ class WrapNode(Node):
         sound_map.info.origin.orientation.w = 1
         sound_map.data = (self.image[:,:,0]).astype(np.int8).reshape(-1).tolist()
         self.sound_map_pub.publish(sound_map)
-        # 5. 0.5秒待機
-        self.rate.sleep()
         # 6. 行動の取得
         action = self.get_action()
         # 7. 行動の送信
         self.send_goal(action)
-    
+        # 8. 制御周期の調整
+        delta_time = time.time() - start_time
+        if delta_time < 1/self.rate:
+            time.sleep(1/self.rate - delta_time)
+        else:
+            print('over time')
+
     def amcl_pose_callback(self, msg):
         # 位置情報の更新
         self.robot_pose = msg.pose.pose
-    
+
     def spatial_resp_callback(self, msg):
         # DOA情報の更新
         self.spatial_resp = np.array(msg.data)
@@ -129,7 +135,7 @@ class WrapNode(Node):
         goal_msg.header.frame_id = "map"
         goal_msg.header.stamp = self.get_clock().now().to_msg()
         self.goal_pose_pub.publish(goal_msg)
-        
+
     def get_action(self):
         # 行動の取得
         req = GetAction.Request()
@@ -137,8 +143,7 @@ class WrapNode(Node):
         # 結果を取得するまで待機
         rclpy.spin_until_future_complete(self, future)
         return [future.result().aciton0, future.result().aciton1]
-    
-    
+
 # *************************************************************************************************
 # メイン関数
 # *************************************************************************************************
