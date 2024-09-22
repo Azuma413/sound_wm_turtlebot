@@ -6,11 +6,11 @@ def main():
   from pathlib import Path
   warnings.filterwarnings('ignore', '.*truncated to dtype int32.*')
 
-  name = "dreamerv3/run1"
+  name = "dreamerv3/small/run0"
 
   wandb.init(project='sound_turtle', group='dreamerv3', name=name)
   config = embodied.Config(dreamerv3.configs['defaults'])
-  config = config.update(dreamerv3.configs['medium'])
+  config = config.update(dreamerv3.configs['small'])
   config = config.update({
       'logdir': Path(__file__).parent / 'weight' / name,
       'run.train_ratio': 64,

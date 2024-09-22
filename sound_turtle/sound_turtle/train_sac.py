@@ -11,49 +11,69 @@ import torch.optim as optim
 class ReplayBuffer:
     def __init__(self, capacity):
         self.buffer = deque(maxlen=capacity)
+
     def push(self, state, action, reward, next_state, done):
         self.buffer.append((state, action, reward, next_state, done))
+
     def sample(self, batch_size):
         state, action, reward, next_state, done = zip(*random.sample(self.buffer, batch_size))
-        return np.array(state), np.array(action), np.array(reward), np.array(next_state), np.array(done)
+        return np.stack(state), np.array(action), np.array(reward), np.stack(next_state), np.array(done)
+
     def __len__(self):
         return len(self.buffer)
 
-class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, max_action):
-        super(Actor, self).__init__()
-        self.l1 = nn.Linear(state_dim, 256)
-        self.l2 = nn.Linear(256, 256)
-        self.l3 = nn.Linear(256, action_dim)
+class ConvActor(nn.Module):
+    def __init__(self, img_channels, action_dim, max_action):
+        super(ConvActor, self).__init__()
+        self.conv1 = nn.Conv2d(img_channels, 32, 3, stride=2)
+        self.conv2 = nn.Conv2d(32, 64, 3, stride=2)
+        self.conv3 = nn.Conv2d(64, 64, 3, stride=2)
+        self.fc1 = nn.Linear(64 * 15 * 15, 256)  # 画像サイズに応じて変更
+        self.fc2 = nn.Linear(256, action_dim)
         self.max_action = max_action
-    def forward(self, state):
-        a = torch.relu(self.l1(state))
-        a = torch.relu(self.l2(a))
-        return self.max_action * torch.tanh(self.l3(a))
 
-class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim):
-        super(Critic, self).__init__()
-        self.l1 = nn.Linear(state_dim + action_dim, 256)
-        self.l2 = nn.Linear(256, 256)
-        self.l3 = nn.Linear(256, 1)
+    def forward(self, state):
+        state = state.permute(0, 3, 1, 2)
+        x = torch.relu(self.conv1(state))
+        x = torch.relu(self.conv2(x))
+        x = torch.relu(self.conv3(x))
+        x = x.reshape(x.size(0), -1)
+        x = torch.relu(self.fc1(x))
+        return self.max_action * torch.tanh(self.fc2(x))
+
+class ConvCritic(nn.Module):
+    def __init__(self, img_channels, action_dim):
+        super(ConvCritic, self).__init__()
+        self.conv1 = nn.Conv2d(img_channels, 32, 3, stride=2)
+        self.conv2 = nn.Conv2d(32, 64, 3, stride=2)
+        self.conv3 = nn.Conv2d(64, 64, 3, stride=2)
+        self.fc1 = nn.Linear(64 * 15 * 15 + action_dim, 256)  # 画像サイズに応じて変更
+        self.fc2 = nn.Linear(256, 256)
+        self.fc3 = nn.Linear(256, 1)
+
     def forward(self, state, action):
-        q = torch.relu(self.l1(torch.cat([state, action], 1)))
-        q = torch.relu(self.l2(q))
-        return self.l3(q)
+        state = state.permute(0, 3, 1, 2)
+        x = torch.relu(self.conv1(state))
+        x = torch.relu(self.conv2(x))
+        x = torch.relu(self.conv3(x))
+        x = x.reshape(x.size(0), -1)
+        x = torch.cat([x, action], dim=1)
+        x = torch.relu(self.fc1(x))
+        x = torch.relu(self.fc2(x))
+        return self.fc3(x)
 
 class SAC:
-    def __init__(self, state_dim, action_dim, max_action):
-        self.actor = Actor(state_dim, action_dim, max_action).to(device)
+    def __init__(self, img_channels, action_dim, max_action):
+        self.actor = ConvActor(img_channels, action_dim, max_action).to(device)
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=3e-4)
 
-        self.critic1 = Critic(state_dim, action_dim).to(device)
-        self.critic2 = Critic(state_dim, action_dim).to(device)
+        self.critic1 = ConvCritic(img_channels, action_dim).to(device)
+        self.critic2 = ConvCritic(img_channels, action_dim).to(device)
         self.critic1_optimizer = optim.Adam(self.critic1.parameters(), lr=3e-4)
         self.critic2_optimizer = optim.Adam(self.critic2.parameters(), lr=3e-4)
 
-        self.target_critic1 = Critic(state_dim, action_dim).to(device)
-        self.target_critic2 = Critic(state_dim, action_dim).to(device)
+        self.target_critic1 = ConvCritic(img_channels, action_dim).to(device)
+        self.target_critic2 = ConvCritic(img_channels, action_dim).to(device)
         self.target_critic1.load_state_dict(self.critic1.state_dict())
         self.target_critic2.load_state_dict(self.critic2.state_dict())
 
@@ -64,7 +84,7 @@ class SAC:
         self.alpha = 0.2
 
     def select_action(self, state):
-        state = torch.FloatTensor(state.reshape(1, -1)).to(device)
+        state = torch.FloatTensor(state).unsqueeze(0).to(device)
         return self.actor(state).cpu().data.numpy().flatten()
 
     def train(self, batch_size=256):
@@ -78,9 +98,12 @@ class SAC:
 
         with torch.no_grad():
             next_action = self.actor(next_state)
-            target_q1 = self.target_critic1(next_state, next_action)
-            target_q2 = self.target_critic2(next_state, next_action)
-            target_q = reward + (1 - done) * self.discount * torch.min(target_q1, target_q2)
+            next_q1 = self.target_critic1(next_state, next_action)
+            next_q2 = self.target_critic2(next_state, next_action)
+            next_q = torch.min(next_q1, next_q2).T
+            log_prob = -self.actor(next_state).mean()  # Approximate log probability
+            target_q = reward + (1 - done) * self.discount * (next_q - self.alpha * log_prob)
+            target_q = target_q.T
 
         current_q1 = self.critic1(state, action)
         current_q2 = self.critic2(state, action)
@@ -95,7 +118,9 @@ class SAC:
         critic2_loss.backward()
         self.critic2_optimizer.step()
 
-        actor_loss = -self.critic1(state, self.actor(state)).mean()
+        log_prob = -self.actor(state).mean()  # Approximate log probability
+        actor_loss = (self.alpha * log_prob - self.critic1(state, self.actor(state))).mean()
+        # actor_loss = -self.critic1(state, self.actor(state)).mean()
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
@@ -115,16 +140,13 @@ class SAC:
 
 if __name__ == "__main__":
     # WandBの初期化
-    wandb.init(project="sound_turtle", group='drqv2', name="sac/run0")  # 'your_wandb_username'を適切に変更
-
-    # env = gym.make("Pendulum-v0")
+    wandb.init(project="sound_turtle", group='drqv2', name="sac/run1")  # 'your_wandb_username'を適切に変更
     env = MyEnv()
-    eval_env = MyEnv()
-    state_dim = env.observation_space.shape[0]
+    img_channels = env.observation_space.shape[2]  # 画像のチャンネル数 (例: RGBなら3)
     action_dim = env.action_space.shape[0]
     max_action = float(env.action_space.high[0])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    sac = SAC(state_dim, action_dim, max_action)
+    sac = SAC(img_channels, action_dim, max_action)
     episodes = 100000000
     batch_size = 256
     episode_length = 0
@@ -141,6 +163,8 @@ if __name__ == "__main__":
             episode_reward += reward
             if len(sac.replay_buffer) > batch_size:
                 sac.train(batch_size)
+            else:
+                sac.train(len(sac.replay_buffer))
             if done:
                 break
         # エピソード終了時に報酬をWandBにログ

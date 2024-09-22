@@ -16,6 +16,8 @@ import yaml
 import wandb
 
 global_count = 0
+# 使用する部屋の番号
+ROOM_NUM = 0 # 0:長方形, 1:L字, 2:仕切り, 3:リアル
 
 class WrapDrQ(gym.Env):
     def __init__(self, env):
@@ -49,7 +51,7 @@ class MySimulator:
             self.map_image = cv2.imread(os.path.dirname(os.path.abspath(__file__)) + "/map/" + map_data["image"], cv2.IMREAD_GRAYSCALE)
             self.resolution = map_data["resolution"] # 1pixelあたりのメートル数
             self.origin = np.array(map_data["origin"]) # mapの右下の隅のpose
-        use_random_obstacle = True # マップにランダムな障害物を追加するかどうか。
+        use_random_obstacle = False # マップにランダムな障害物を追加するかどうか。
         if use_random_obstacle:
             max_obstacle_size = 5 # 障害物の最大サイズ（ピクセル）
             obstacle_size = np.random.randint(1, max_obstacle_size + 1, size=2)
@@ -222,7 +224,7 @@ class MyEnv(gym.Env):
         self.move_result = True
         self.render_size = 480
         self.mark_corner = False # 部屋の形状をrenderに表示するか。
-        self.done_when_hit_wall = True # 壁に当たったときにエピソードを終了するか。
+        self.done_when_hit_wall = False # 壁に当たったときにエピソードを終了するか。
         self.log_video_step = 50 # 何エピソードごとにログを取るか。
 
     def reset(self, seed=None, options=None):
