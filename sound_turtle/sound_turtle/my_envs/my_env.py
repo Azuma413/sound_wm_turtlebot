@@ -17,7 +17,7 @@ import wandb
 
 global_count = 0
 # 使用する部屋の番号
-ROOM_NUM = 0 # 0:長方形, 1:L字, 2:仕切り, 3:リアル
+ROOM_NUM = 3 # 0:長方形, 1:L字, 2:仕切り, 3:リアル
 
 class WrapDrQ(gym.Env):
     def __init__(self, env):
@@ -86,24 +86,42 @@ class MySimulator:
         self.robot_height = 0.3 # ロボットの高さ
         self.move_range = 0.2 # ロボットの移動範囲[m]
         self.mic_num = 8 # マイクロフォンアレイの数
-        self.use_strict_room = True
-        if self.use_strict_room:
-            room_data = [[0,1.438],[0,2.368],[1,2.368],[1,3.438],[1.69,3.438],[1.69,4.3],[13,4.3],
-                         [13,2.35],[8.5,2.35],[8.5,2.25],[13,2.25],[13,0],[4.155,0],[4.155,1.438]]
-            theta = -135
-            theta = theta*np.pi/180
-            rot_mat = np.array([[np.cos(theta), -np.sin(theta)],[np.sin(theta),np.cos(theta)]])
-            room_data = np.array(room_data)
-            room_data -= np.array([max(room_data[0])/2, max(room_data[1])/2])
-            self.corners = np.dot(rot_mat, room_data.T).T
-            self.corners = self.corners[:, ::-1]
-            linear_motion = np.array([6.5,3.5])
-            # linear_motion = np.array([6.5,3.1])
-            self.corners += linear_motion
+        if ROOM_NUM == 3: # リアルな部屋の形状
+            self.use_strict_room = True
+            if self.use_strict_room:
+                room_data = [[0,1.438],[0,2.368],[1,2.368],[1,3.438],[1.69,3.438],[1.69,4.3],[13,4.3],
+                            [13,2.35],[8.5,2.35],[8.5,2.25],[13,2.25],[13,0],[4.155,0],[4.155,1.438]]
+                theta = -135
+                theta = theta*np.pi/180
+                rot_mat = np.array([[np.cos(theta), -np.sin(theta)],[np.sin(theta),np.cos(theta)]])
+                room_data = np.array(room_data)
+                room_data -= np.array([max(room_data[0])/2, max(room_data[1])/2])
+                self.corners = np.dot(rot_mat, room_data.T).T
+                self.corners = self.corners[:, ::-1]
+                linear_motion = np.array([6.5,3.5])
+                # linear_motion = np.array([6.5,3.1])
+                self.corners += linear_motion
+            else:
+                room_dim0 = self.pixel2coord(self.map_image.shape) # 部屋の大まかな寸法
+                room_dim1 = self.pixel2coord([0, 0])
+                self.corners = np.array([room_dim1, [room_dim0[0],room_dim1[1]], room_dim0, [room_dim1[0],room_dim0[1]]])  # [x,y] 壁がない部屋
         else:
-            room_dim0 = self.pixel2coord(self.map_image.shape) # 部屋の大まかな寸法
-            room_dim1 = self.pixel2coord([0, 0])
-            self.corners = np.array([room_dim1, [room_dim0[0],room_dim1[1]], room_dim0, [room_dim1[0],room_dim0[1]]])  # [x,y] 壁がない部屋
+            self.image[:,:,1] = 255 # いったん全てを壁にする
+            if ROOM_NUM == 0: # 長方形の部屋
+                self.corners = np.array([[0, 0], [0, 5], [8, 5], [8, 0]])
+                pixel_corners = np.array([self.coord2pixel(corner) for corner in self.corners])
+                # 部屋の中を0で埋める
+                cv2.fillPoly(self.image[:,:,1], [pixel_corners], 0)
+            elif ROOM_NUM == 1: # L字の部屋
+                self.corners = np.array([[0, 0], [0, 5], [8, 5], [8, 3], [5, 3], [5, 0]])
+                pixel_corners = np.array([self.coord2pixel(corner) for corner in self.corners])
+                # 部屋の中を0で埋める
+                cv2.fillPoly(self.image[:,:,1], [pixel_corners], 0)
+            elif ROOM_NUM == 2: # 仕切りのある部屋
+                self.corners = np.array([[0, 0], [0, 5], [8, 5], [8, 3], [5, 3], [5, 0]])
+                pixel_corners = np.array([self.coord2pixel(corner) for corner in self.corners])
+                # 部屋の中を0で埋める
+                cv2.fillPoly(self.image[:,:,1], [pixel_corners], 0)
         self.height = 3. # 天井の高さ
 
     def coord2pixel(self, coord):
