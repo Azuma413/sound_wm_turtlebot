@@ -74,7 +74,7 @@ class MySimulator:
         robot_range = 0.
         self.sound_locations_2d = self.pixel2coord(self.map_image.shape*self.sound_base_pos) + self.sound_range*np.array(sound_locations) # 音源の位置
         self.sound_locations = np.array([np.array([self.sound_locations_2d[0][0], self.sound_locations_2d[0][1], self.sound_height])])
-        use_original_sound = False # Trueなら音源をそのまま使う。Falseならランダムな音源を生成する。 
+        use_original_sound = False # Trueなら音源をそのまま使う。Falseならランダムな音源を生成する。
         # 音源を作成
         if use_original_sound:
             sound_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "SoundSource/sound_source.wav")
@@ -86,7 +86,6 @@ class MySimulator:
         self.robot_height = 0.3 # ロボットの高さ
         self.move_range = 0.2 # ロボットの移動範囲[m]
         self.mic_num = 8 # マイクロフォンアレイの数
-        # 部屋の形状はmapデータを参照して適切に決める。音の反響はある程度割り切る。
         self.use_strict_room = True
         if self.use_strict_room:
             room_data = [[0,1.438],[0,2.368],[1,2.368],[1,3.438],[1.69,3.438],[1.69,4.3],[13,4.3],
@@ -106,7 +105,7 @@ class MySimulator:
             room_dim1 = self.pixel2coord([0, 0])
             self.corners = np.array([room_dim1, [room_dim0[0],room_dim1[1]], room_dim0, [room_dim1[0],room_dim0[1]]])  # [x,y] 壁がない部屋
         self.height = 3. # 天井の高さ
-    
+
     def coord2pixel(self, coord):
         """
         coord: 2次元座標
@@ -115,7 +114,7 @@ class MySimulator:
         u = self.map_image.shape[0] - int((coord[1] - self.origin[1])/self.resolution)
         v = self.map_image.shape[1] - int((coord[0] - self.origin[0])/self.resolution)
         return np.array([u, v])
-    
+
     def pixel2coord(self, pixel):
         """
         pixel: 2次元座標
@@ -187,12 +186,11 @@ class MySimulator:
         self.image[:,:,0] += 0.08 #0.1 # 値が小さくなりすぎると更新が上手くいかなくなる
         self.image[self.image < 0] = 0.0
         self.image[self.image > 255] = 255.0 
-        
         # Bチャンネルの値を更新
         slice_idx = int(self.image.shape[1]/2)
         self.image[:,:slice_idx,2] = robot_pixel[0]/self.map_image.shape[0]*255.0
         self.image[:,slice_idx:,2] = robot_pixel[1]/self.map_image.shape[1]*255.0
-    
+
 class MyEnv(gym.Env):
     def __init__(self, env_config=None):
         super(MyEnv, self).__init__()
