@@ -17,7 +17,7 @@ import wandb
 
 global_count = 0
 # 使用する部屋の番号
-ROOM_NUM = 3 # 0:長方形, 1:L字, 2:仕切り, 3:リアル
+ROOM_NUM = 0 # 0:長方形, 1:L字, 2:仕切り, 3:リアル
 
 class WrapDrQ(gym.Env):
     def __init__(self, env):
@@ -106,22 +106,26 @@ class MySimulator:
                 room_dim1 = self.pixel2coord([0, 0])
                 self.corners = np.array([room_dim1, [room_dim0[0],room_dim1[1]], room_dim0, [room_dim1[0],room_dim0[1]]])  # [x,y] 壁がない部屋
         else:
-            self.image[:,:,1] = 255 # いったん全てを壁にする
+            image_ = np.ones_like(self.image[:,:,1])*255
+            image_ = image_.astype(np.uint8)
+            # xが上，yが左
             if ROOM_NUM == 0: # 長方形の部屋
-                self.corners = np.array([[0, 0], [0, 5], [8, 5], [8, 0]])
+                self.corners = np.array([[0, 0], [0, 8], [5, 8], [5, 0]]) + np.array([0,-4])
                 pixel_corners = np.array([self.coord2pixel(corner) for corner in self.corners])
                 # 部屋の中を0で埋める
-                cv2.fillPoly(self.image[:,:,1], [pixel_corners], 0)
+                cv2.fillPoly(image_, [pixel_corners], 0)
             elif ROOM_NUM == 1: # L字の部屋
-                self.corners = np.array([[0, 0], [0, 5], [8, 5], [8, 3], [5, 3], [5, 0]])
+                self.corners = np.array([[0, 0], [0, 8], [7, 8], [7, 5], [5, 5], [5, 0]]) + np.array([-1,-4])
                 pixel_corners = np.array([self.coord2pixel(corner) for corner in self.corners])
                 # 部屋の中を0で埋める
-                cv2.fillPoly(self.image[:,:,1], [pixel_corners], 0)
+                cv2.fillPoly(image_, [pixel_corners], 0)
             elif ROOM_NUM == 2: # 仕切りのある部屋
-                self.corners = np.array([[0, 0], [0, 5], [8, 5], [8, 3], [5, 3], [5, 0]])
+                self.corners = np.array([[0, 0], [0, 8], [5, 8], [5, 4.5], [2, 4.5], [2, 4.3], [5, 4.3],[5, 0]]) + np.array([0,-4])
                 pixel_corners = np.array([self.coord2pixel(corner) for corner in self.corners])
                 # 部屋の中を0で埋める
-                cv2.fillPoly(self.image[:,:,1], [pixel_corners], 0)
+                cv2.fillPoly(image_, [pixel_corners], 0)
+            self.image[:,:,1] = image_.astype(np.float32)
+            self.map_image = 255 - image_
         self.height = 3. # 天井の高さ
 
     def coord2pixel(self, coord):
@@ -189,7 +193,8 @@ class MySimulator:
         doa = pra.doa.algorithms['MUSIC'](mic_locs, self.fs, self.nfft, c=343., num_src=2, max_four=4)
         doa.locate_sources(X, freq_range=self.freq_range)
         spatial_resp = doa.grid.values # 標準化をなくしている
-        spatial_resp = (spatial_resp - spatial_resp.min())/(spatial_resp.max() - spatial_resp.min())
+        spatial_resp = spatial_resp # 30くらいまで行く
+        # spatial_resp = (spatial_resp - spatial_resp.min())/(spatial_resp.max() - spatial_resp.min())
         # robotの画像上の座標
         robot_pixel = self.coord2pixel(self.center)
 
@@ -198,16 +203,19 @@ class MySimulator:
         points = np.array(np.meshgrid(np.arange(self.map_image.shape[0]), np.arange(self.map_image.shape[1]))).T.reshape(-1, 2)
         point_angles = np.arctan2(points[:,0] - robot_pixel[0], points[:,1] - robot_pixel[1])*180/np.pi + 180
         point_angles = (point_angles + 360) % 360
+        # パラメータ
+        A = 4.5 # spatial_respの値の内，情報を持たないと判断する値の最大値
+        B = 0.05 # spatial_respの値をどれだけスケールするか
+        C = 0.85 # 値を更新する際の最小値
+        D = 3 # 最低値
         for i, point_angle in enumerate(point_angles):
-            shift_value = 0.3 #0.4 # 値を大きくするほど，確率分布が収束しにくくなる
-            self.image[points[i,0], points[i,1], 0] *= max(spatial_resp[int(point_angle)] + shift_value, 0.95) # ピーキーな値の変動を抑える
-        self.image[:,:,0] += 0.08 #0.1 # 値が小さくなりすぎると更新が上手くいかなくなる
-        self.image[self.image < 0] = 0.0
-        self.image[self.image > 255] = 255.0 
+            self.image[points[i,0], points[i,1], 0] *= max(spatial_resp[int(point_angle)], A)*B - A*B + C
+        self.image[self.image[:,:,0] < D, 0] = D
         # Bチャンネルの値を更新
         slice_idx = int(self.image.shape[1]/2)
         self.image[:,:slice_idx,2] = robot_pixel[0]/self.map_image.shape[0]*255.0
         self.image[:,slice_idx:,2] = robot_pixel[1]/self.map_image.shape[1]*255.0
+        self.image = np.clip(self.image, 0, 255)
 
 class MyEnv(gym.Env):
     def __init__(self, env_config=None):
@@ -335,28 +343,6 @@ class MyEnv(gym.Env):
                 # THWC -> TCHW
                 video = video.transpose(0,3,1,2)
                 wandb.log({"video": wandb.Video(video)})
-                # # image_listをmp4に変換して保存
-                # fourcc = cv2.VideoWriter.fourcc(*'mp4v')
-                # current_dir = os.path.dirname(os.path.abspath(__file__))
-                # path = f"video/video"
-                # path = os.path.join(current_dir, path) # 絶対pathに変換
-                # if not os.path.exists(path):
-                #     os.makedirs(path)
-                # i = 0
-                # while True:
-                #     filename = f'trajectory{i}.mp4'
-                #     filename = os.path.join(path, filename) # 絶対pathに変換
-                #     if os.path.exists(filename):
-                #         i += 1
-                #         continue
-                #     else:
-                #         out = cv2.VideoWriter(filename, fourcc, 8.0, (img.shape[0], img.shape[1]))
-                #         break
-                # for image in self.image_list:
-                #     # RGBからBGRに変換
-                #     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-                #     out.write(image)
-                # out.release()
         return obs, reward, done, info
 
     def render(self, mode='rgb_array'):
