@@ -7,6 +7,9 @@ import wandb  # WandBのインポート
 from my_envs.my_env import MyEnv
 import torch.nn as nn
 import torch.optim as optim
+# from gym.wrappers import gray_scale_observation, resize_observation, frame_stack
+from gym.wrappers import GrayScaleObservation, ResizeObservation, FrameStack
+from PIL import Image
 
 class ReplayBuffer:
     def __init__(self, capacity):
@@ -22,41 +25,39 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
 
-class ConvActor(nn.Module):
-    def __init__(self, img_channels, action_dim, max_action):
-        super(ConvActor, self).__init__()
+class Encoder(nn.Module):
+    def __init__(self, img_channels):
+        super(Encoder, self).__init__()
         self.conv1 = nn.Conv2d(img_channels, 32, 3, stride=2)
         self.conv2 = nn.Conv2d(32, 64, 3, stride=2)
         self.conv3 = nn.Conv2d(64, 64, 3, stride=2)
-        self.fc1 = nn.Linear(64 * 15 * 15, 256)  # 画像サイズに応じて変更
-        self.fc2 = nn.Linear(256, action_dim)
-        self.max_action = max_action
-
     def forward(self, state):
         state = state.permute(0, 3, 1, 2)
         x = torch.relu(self.conv1(state))
         x = torch.relu(self.conv2(x))
         x = torch.relu(self.conv3(x))
         x = x.reshape(x.size(0), -1)
+        return x
+
+class Actor(nn.Module):
+    def __init__(self, action_dim, max_action):
+        super(Actor, self).__init__()
+        self.fc1 = nn.Linear(64 * 15 * 15, 256)  # 画像サイズに応じて変更
+        self.fc2 = nn.Linear(256, action_dim)
+        self.max_action = max_action
+
+    def forward(self, x):
         x = torch.relu(self.fc1(x))
         return self.max_action * torch.tanh(self.fc2(x))
 
-class ConvCritic(nn.Module):
-    def __init__(self, img_channels, action_dim):
-        super(ConvCritic, self).__init__()
-        self.conv1 = nn.Conv2d(img_channels, 32, 3, stride=2)
-        self.conv2 = nn.Conv2d(32, 64, 3, stride=2)
-        self.conv3 = nn.Conv2d(64, 64, 3, stride=2)
+class Critic(nn.Module):
+    def __init__(self, action_dim):
+        super(Critic, self).__init__()
         self.fc1 = nn.Linear(64 * 15 * 15 + action_dim, 256)  # 画像サイズに応じて変更
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 1)
 
-    def forward(self, state, action):
-        state = state.permute(0, 3, 1, 2)
-        x = torch.relu(self.conv1(state))
-        x = torch.relu(self.conv2(x))
-        x = torch.relu(self.conv3(x))
-        x = x.reshape(x.size(0), -1)
+    def forward(self, x, action):
         x = torch.cat([x, action], dim=1)
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
@@ -140,8 +141,15 @@ class SAC:
 
 if __name__ == "__main__":
     # WandBの初期化
-    wandb.init(project="sound_turtle", group='drqv2', name="sac/run1")  # 'your_wandb_username'を適切に変更
-    env = MyEnv()
+    seed = 0
+    wandb.init(project="sound_turtle", name=f"sac/run{seed}")  # 'your_wandb_username'を適切に変更
+    
+    # env = MyEnv()
+    env = gym.make("CarRacing-v2")
+    env = ResizeObservation(env, (128, 128))
+    env = FrameStack(env, num_stack=4)
+    
+    torch.manual_seed(seed)
     img_channels = env.observation_space.shape[2]  # 画像のチャンネル数 (例: RGBなら3)
     action_dim = env.action_space.shape[0]
     max_action = float(env.action_space.high[0])
@@ -150,14 +158,20 @@ if __name__ == "__main__":
     episodes = 100000000
     batch_size = 256
     episode_length = 0
+    global_step = 0
+    max_step = 100000
     for episode in range(episodes):
         episode_length = 0
         state = env.reset()
+        state = np.array(state) # 後で消す
+        print("state: ", state)
         episode_reward = 0
         for t in range(200):
+            global_step += 1
             episode_length += 1
             action = sac.select_action(state)
             next_state, reward, done, _ = env.step(action)
+            next_state = np.array(next_state) # 後で消す
             sac.replay_buffer.push(state, action, reward, next_state, done)
             state = next_state
             episode_reward += reward
@@ -166,6 +180,8 @@ if __name__ == "__main__":
             else:
                 sac.train(len(sac.replay_buffer))
             if done:
+                break
+            if global_step >= max_step:
                 break
         # エピソード終了時に報酬をWandBにログ
         wandb.log({"train/score":episode_reward, "train/length":episode_length})

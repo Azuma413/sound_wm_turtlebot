@@ -187,10 +187,8 @@ class WorldModel(nj.Module):
       prev = prev.copy()
       state = self.rssm.img_step(prev, prev.pop('action'))
       return {**state, 'action': policy(state)}
-    traj = jaxutils.scan(
-        step, jnp.arange(horizon), start, self.config.imag_unroll)
-    traj = {
-        k: jnp.concatenate([start[k][None], v], 0) for k, v in traj.items()}
+    traj = jaxutils.scan(step, jnp.arange(horizon), start, self.config.imag_unroll)
+    traj = {k: jnp.concatenate([start[k][None], v], 0) for k, v in traj.items()}
     cont = self.heads['cont'](traj).mode()
     traj['cont'] = jnp.concatenate([first_cont[None], cont[1:]], 0)
     discount = 1 - 1 / self.config.horizon

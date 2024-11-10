@@ -84,8 +84,8 @@ defaults:
   actor_grad_disc: reinforce
   actor_grad_cont: backprop
   critic_type: vfunction
-  imag_horizon: 15
-  imag_unroll: False
+  imag_horizon: 25
+  imag_unroll: False # 計算の高速化のためにFalseにしている
   horizon: 333
   return_lambda: 0.95
   critic_slowreg: logprob
