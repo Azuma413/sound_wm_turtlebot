@@ -255,8 +255,8 @@ class MyEnv(gym.Env):
         self.estimated_sound_location = []
         self.move_result = True
         self.render_size = 480
-        self.mark_corner = False # 部屋の形状をrenderに表示するか。
-        self.drow_robot_trajectory = True # ロボットの軌跡を描画するか。
+        self.mark_corner = True # 部屋の形状をrenderに表示するか。
+        self.drow_robot_trajectory = False # ロボットの軌跡を描画するか。
         self.drow_sound_trajectory = False # 音源の軌跡を描画するか。
         self.done_when_hit_wall = False # 壁に当たったときにエピソードを終了するか。
         self.log_video_step = 50 # 何エピソードごとにログを取るか。
