@@ -230,17 +230,18 @@ class MySimulator:
             self.image[points[i,0], points[i,1], 0] *= max(spatial_resp[int(point_angle)], A)*B - A*B + C
         self.image[self.image[:,:,0] < D, 0] = D
         # Bチャンネルの値を更新
-        size = 3
-        self.image[
-            max(0, robot_pixel[0]-size):min(self.map_image.shape[0], robot_pixel[0]+size), 
-            max(0, robot_pixel[1]-size):min(self.map_image.shape[1], robot_pixel[1]+size), 2] = 255
-        # slice_idx = int(self.image.shape[1]/2)
-        # self.image[:,:slice_idx,2] = robot_pixel[0]/self.map_image.shape[0]*255.0
-        # self.image[:,slice_idx:,2] = robot_pixel[1]/self.map_image.shape[1]*255.0
+        # self.image[:,:,2] = 0
+        # size = 3
+        # self.image[
+        #     max(0, robot_pixel[0]-size):min(self.map_image.shape[0], robot_pixel[0]+size), 
+        #     max(0, robot_pixel[1]-size):min(self.map_image.shape[1], robot_pixel[1]+size), 2] = 255
+        slice_idx = int(self.image.shape[1]/2)
+        self.image[:,:slice_idx,2] = robot_pixel[0]/self.map_image.shape[0]*255.0
+        self.image[:,slice_idx:,2] = robot_pixel[1]/self.map_image.shape[1]*255.0
         self.image = np.clip(self.image, 0, 255)
 
 class MyEnv(gym.Env):
-    def __init__(self, room_num, env_config=None):
+    def __init__(self, room_num=0, env_config=None):
         super(MyEnv, self).__init__()
         """
         action_space:エージェントがとり得る行動空間
@@ -269,7 +270,7 @@ class MyEnv(gym.Env):
         self.estimated_sound_location = []
         self.move_result = True
         self.render_size = 480
-        self.mark_corner = True # 部屋の形状をrenderに表示するか。
+        self.mark_corner = False # 部屋の形状をrenderに表示するか。
         self.drow_robot_trajectory = False # ロボットの軌跡を描画するか。
         self.drow_sound_trajectory = False # 音源の軌跡を描画するか。
         self.done_when_hit_wall = False # 壁に当たったときにエピソードを終了するか。
@@ -388,11 +389,11 @@ class MyEnv(gym.Env):
         _, bin_img = cv2.threshold(gray, 210, 255, cv2.THRESH_BINARY) # 二値化
         contours, _ = cv2.findContours(bin_img, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE) # 輪郭抽出
         img[:,:,1] = 0
-        # cv2.drawContours(img, contours, -1, (0, 255, 0), 2) # 輪郭を描画
+        cv2.drawContours(img, contours, -1, (0, 255, 0), 2) # 輪郭を描画
         # Bチャンネルをリセットしてロボットの位置を描画
         img[:,:,2] = 0
         x, y = self.my_sim.coord2pixel(self.my_sim.center)*scale # ピクセル上の座標を取得
-        # cv2.circle(img, (int(y), int(x)), 5, (0, 200, 200), -1)
+        cv2.circle(img, (int(y), int(x)), 5, (0, 200, 200), -1)
         # 音源の位置を描画
         for point in self.my_sim.sound_locations_2d:
             x, y = self.my_sim.coord2pixel(point)*scale
@@ -400,7 +401,7 @@ class MyEnv(gym.Env):
         # for point in self.my_sim.sound_locs:
         #     point = point[:2]
         #     x, y = self.my_sim.coord2pixel(point)*scale
-            # cv2.circle(img, (int(y), int(x)), 5, (255, 255, 255), -1)
+        #     cv2.circle(img, (int(y), int(x)), 5, (255, 255, 255), -1)
         # self.confidence_threshold*255以上のRチャンネルの値を持つピクセルを囲う
         gray = img[:,:,0]
         _, bin_img = cv2.threshold(gray, int(self.confidence_threshold*255), 255, cv2.THRESH_BINARY) # 二値化
@@ -416,7 +417,7 @@ class MyEnv(gym.Env):
         if len(self.estimated_sound_location) > 0:
             # self.estimated_sound_locationをndarrayのintに変換
             point = (np.array(self.estimated_sound_location[-1])*scale).astype(np.int32)
-            # cv2.circle(img, (point[::-1]), 5, (255, 255, 0), -1)
+            cv2.circle(img, (point[::-1]), 5, (255, 255, 0), -1)
         if self.drow_sound_trajectory:
             for i in range(len(self.estimated_sound_location) - 1):
                 p1 = (self.estimated_sound_location[i]*scale).astype(np.int32)
@@ -424,7 +425,6 @@ class MyEnv(gym.Env):
                 cv2.line(img, tuple(p1[::-1]), tuple(p2[::-1]), (255, 200, 100), 1)
         # self.my_sim.cornersを描画
         if self.mark_corner:
-            print("部屋の形状を描画します。")
             img_corners = []
             for corner in self.my_sim.corners:
                 x, y = self.my_sim.coord2pixel(corner)*scale
@@ -436,8 +436,8 @@ class MyEnv(gym.Env):
         fontScale = 1
         fontColor = (255,255,255)
         lineType = 2
-        # cv2.putText(img, f"rwd: {self.reward_value:.3f}", (20, img.shape[0]-15), font, fontScale, fontColor, lineType)
-        # cv2.putText(img, f"sum: {self.reward_sum:.3f}", (20, 30), font, fontScale, fontColor, lineType)
+        cv2.putText(img, f"rwd: {self.reward_value:.3f}", (20, img.shape[0]-15), font, fontScale, fontColor, lineType)
+        cv2.putText(img, f"sum: {self.reward_sum:.3f}", (20, 30), font, fontScale, fontColor, lineType)
         if not self.move_result:
             cv2.putText(img, "hit wall", (int(img.shape[1]/2), img.shape[0]-15), font, fontScale, (255, 100, 0), lineType)
         return img

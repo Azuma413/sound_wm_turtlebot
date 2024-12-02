@@ -11,13 +11,15 @@ from drqv2.replay_buffer import ReplayBufferStorage, make_replay_loader
 from drqv2.video import TrainVideoRecorder, VideoRecorder
 from my_envs.my_env import MyEnv, WrapDrQ
 import wandb
+import sys
 
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 os.environ['MKL_SERVICE_FORCE_INTEL'] = '1'
 os.environ['MUJOCO_GL'] = 'egl'
 torch.backends.cudnn.benchmark = True
 
-name = 'drqv2/run0'
+seed_num = 4
+name = f'drqv2/run{seed_num}'
 
 def make_agent(obs_spec, action_spec, cfg):
     cfg.obs_shape = obs_spec.shape
@@ -47,9 +49,9 @@ class Workspace:
         self.logger = Logger(self.work_dir, use_tb=self.cfg.use_tb)
 
         # 設定を上書き
-        self.train_env = MyEnv()
+        self.train_env = MyEnv(room_num=0)
         self.train_env = WrapDrQ(self.train_env)
-        self.eval_env = MyEnv()
+        self.eval_env = MyEnv(room_num=0)
         self.eval_env = WrapDrQ(self.eval_env)
         
         # create replay buffer
@@ -121,6 +123,9 @@ class Workspace:
     def train(self):
         print("start training")
         # predicates
+        self.cfg.num_train_frames = 100000
+        self.cfg.action_repeat = 1
+        print("train_until_step: ", self.cfg.num_train_frames)
         train_until_step = utils.Until(self.cfg.num_train_frames,
                                        self.cfg.action_repeat)
         seed_until_step = utils.Until(self.cfg.num_seed_frames,
@@ -203,7 +208,7 @@ class Workspace:
 
 @hydra.main(config_path='my_config', config_name='drqv2')
 def main(cfg):
-    wandb.init(project='sound_turtle', group='drqv2', name=name)
+    wandb.init(project='SoundTurtle', group='drqv2', name=name)
     workspace = Workspace(cfg)
     snapshot = Path('hogehoge') #Path('/home/desktop/Document/VScode/rl_linetrace/drqv2/exp_local/2024.06.23/163843_/snapshot.pt')
     print(snapshot)
@@ -216,5 +221,6 @@ def main(cfg):
 
 
 if __name__ == '__main__':
-    print("execute train_drq.py")
     main()
+    # print("execute train_drq.py")
+    # main()
