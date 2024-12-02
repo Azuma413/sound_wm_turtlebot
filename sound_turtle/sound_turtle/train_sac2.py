@@ -1,60 +1,22 @@
 import ray
-import ray.rllib
 from ray.rllib.algorithms.sac import SACConfig
 from my_envs.my_env import MyEnv
 import wandb
 import sys
-import gym
-
-class WrapSAC(gym.Env):
-    def __init__(self, env):
-        self.env = env
-        # gym.spaces.Boxをray.rllib.utils.spaces.Boxに変換
-        self.observation_space = ray.rllib.utils.spaces.Box(
-            low=env.observation_space.low,
-            high=env.observation_space.high,
-            shape=env.observation_space.shape,
-            dtype=env.observation_space.dtype
-        )
-        self.action_space = ray.rllib.utils.spaces.Box(
-            low=env.action_space.low,
-            high=env.action_space.high,
-            shape=env.action_space.shape,
-            dtype=env.action_space.dtype
-        )
-        
-    def reset(self):
-        obs = self.env.reset()
-        return obs
-    def step(self, action):
-        obs, reward, done, _ = self.env.step(action)
-        return obs, reward, done, {}
-    def render(self, mode='rgb_array'):
-        return self.env.render()
 
 def main(seed):
     # Rayの初期化
     ray.init()
-    env_ = MyEnv()
-    env = WrapSAC(env_)
+    env = MyEnv()
     obs_space = env.observation_space
     act_space = env.action_space
     # SACの設定
     config = (
         SACConfig()
-        .environment(env=WrapSAC(env_), render_env=False)
-        .rollouts(num_rollout_workers=1)  # 並列ワーカー数
+        .environment(env=MyEnv, render_env=False)
+        .rollouts(num_env_runners=1)  # 並列ワーカー数
         .framework("torch")  # PyTorchを使用
         .resources(num_gpus=1)  # GPUを使用する場合は適切に設定
-        .training(model={
-            "conv_filters": [
-                [32, [3, 3], 2],
-                [32, [3, 3], 1],
-                [32, [3, 3], 1],
-                [32, [3, 3], 1]
-            ],  # CNNの設定
-            "fcnet_hiddens": [256, 256]  # 全結合層のユニット数
-        })
         .environment(observation_space=obs_space, action_space=act_space)
     )
     algo = config.build()

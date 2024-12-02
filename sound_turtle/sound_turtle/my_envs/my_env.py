@@ -1,5 +1,5 @@
-import gym
-from gym import spaces
+import gymnasium as gym # import gym
+from gymnasium import spaces
 import numpy as np
 import pyroomacoustics as pra
 from scipy.io import wavfile
@@ -249,7 +249,7 @@ class MyEnv(gym.Env):
         reward_range:報酬の最小値と最大値
         """
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
-        self.image_size = 128
+        self.image_size = 64 # 128
         self.observation_space = spaces.Box(low=0, high=1.0, shape=(self.image_size, self.image_size, 3), dtype=np.float32)
         self.reward_range = [-1., 1.]
         self.my_sim = None
