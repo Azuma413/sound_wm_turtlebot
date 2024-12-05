@@ -7,182 +7,240 @@ import wandb  # WandBのインポート
 from my_envs.my_env import MyEnv
 import torch.nn as nn
 import torch.optim as optim
-# from gym.wrappers import gray_scale_observation, resize_observation, frame_stack
-from gym.wrappers import GrayScaleObservation, ResizeObservation, FrameStack
+import sys
+from gym import ObservationWrapper
+from gym.spaces import Box
 from PIL import Image
+
+class RenderObservationWrapper(ObservationWrapper):
+    def __init__(self, env, shape=(128, 128)):
+        super().__init__(env)
+        self.shape = shape
+        self.observation_space = Box(
+            low=0, high=255, shape=(shape[0], shape[1], 3), dtype=np.uint8
+        )
+    def observation(self, observation):
+        frame = self.env.render()
+        frame = Image.fromarray(frame)
+        frame = frame.resize(self.shape)
+        return np.array(frame, dtype=np.uint8)
 
 class ReplayBuffer:
     def __init__(self, capacity):
-        self.buffer = deque(maxlen=capacity)
-
+        self.buffer = deque(maxlen=int(capacity))
     def push(self, state, action, reward, next_state, done):
         self.buffer.append((state, action, reward, next_state, done))
-
     def sample(self, batch_size):
         state, action, reward, next_state, done = zip(*random.sample(self.buffer, batch_size))
         return np.stack(state), np.array(action), np.array(reward), np.stack(next_state), np.array(done)
-
     def __len__(self):
         return len(self.buffer)
 
 class Encoder(nn.Module):
-    def __init__(self, img_channels):
-        super(Encoder, self).__init__()
-        self.conv1 = nn.Conv2d(img_channels, 32, 3, stride=2)
-        self.conv2 = nn.Conv2d(32, 64, 3, stride=2)
-        self.conv3 = nn.Conv2d(64, 64, 3, stride=2)
-    def forward(self, state):
-        state = state.permute(0, 3, 1, 2)
-        x = torch.relu(self.conv1(state))
-        x = torch.relu(self.conv2(x))
-        x = torch.relu(self.conv3(x))
-        x = x.reshape(x.size(0), -1)
-        return x
+    def __init__(self, obs_shape):
+        super().__init__()
+        assert len(obs_shape) == 3
+        self.repr_dim = 103968 # Encoderの出力次元
+        self.convnet = nn.Sequential(
+            nn.Conv2d(obs_shape[-1], 32, 3, stride=2),
+            nn.GELU(), nn.Conv2d(32, 32, 3, stride=1),
+            nn.GELU(), nn.Conv2d(32, 32, 3, stride=1),
+            nn.GELU(), nn.Conv2d(32, 32, 3, stride=1),
+            nn.GELU()
+        )
+        self.optimizer = optim.AdamW(self.parameters(), lr=1e-4)
+    def forward(self, obs):
+        obs = obs.permute(0, 3, 1, 2)
+        obs = obs - 0.5
+        h = self.convnet(obs)
+        h = h.reshape(h.shape[0], -1)
+        return h
 
 class Actor(nn.Module):
-    def __init__(self, action_dim, max_action):
-        super(Actor, self).__init__()
-        self.fc1 = nn.Linear(64 * 15 * 15, 256)  # 画像サイズに応じて変更
-        self.fc2 = nn.Linear(256, action_dim)
-        self.max_action = max_action
-
-    def forward(self, x):
-        x = torch.relu(self.fc1(x))
-        return self.max_action * torch.tanh(self.fc2(x))
+    def __init__(self, repr_dim, action_space: gym.Space, unit_dim=256):
+        super().__init__()
+        self.action_dim = action_space.shape[0] # 行動の次元
+        self.action_center = (action_space.high + action_space.low) / 2 # 行動空間の中心
+        self.action_scale = action_space.high - self.action_center # 行動空間のスケール
+        self.action_center = torch.FloatTensor(self.action_center).to("cuda")
+        self.action_scale = torch.FloatTensor(self.action_scale).to("cuda")
+        self.hidden_layers = nn.Sequential(
+            nn.Linear(repr_dim, unit_dim), nn.GELU(),
+            nn.Linear(unit_dim, unit_dim), nn.GELU(),
+            nn.Linear(unit_dim, unit_dim), nn.GELU()
+        )
+        self.mean_layer = nn.Linear(unit_dim, self.action_dim) # 平均
+        self.std_layer = nn.Linear(unit_dim, self.action_dim) # 標準偏差
+        self.optimizer = optim.AdamW(self.parameters(), lr=1e-4)
+    def forward(self, input):
+        h = self.hidden_layers(input)
+        mean = self.mean_layer(h)
+        log_std = self.std_layer(h)
+        log_std = torch.clamp(log_std, -20, 2)
+        std = log_std.exp()
+        normal = torch.distributions.Normal(mean, std)
+        x_t = normal.rsample()  # detachせずにそのまま
+        y_t = torch.tanh(x_t)
+        action = y_t * self.action_scale + self.action_center
+        log_prob = normal.log_prob(x_t)
+        log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + 1e-6)
+        log_prob = log_prob.sum(1, keepdim=True)
+        return action, log_prob
 
 class Critic(nn.Module):
-    def __init__(self, action_dim):
-        super(Critic, self).__init__()
-        self.fc1 = nn.Linear(64 * 15 * 15 + action_dim, 256)  # 画像サイズに応じて変更
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, 1)
-
-    def forward(self, x, action):
-        x = torch.cat([x, action], dim=1)
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
-        return self.fc3(x)
+    def __init__(self, repr_dim, action_dim, unit_dim=64):
+        super().__init__()
+        self.hidden_layers1 = nn.Sequential(
+            nn.Linear(repr_dim + action_dim, unit_dim), nn.GELU(),
+            nn.Linear(unit_dim, unit_dim), nn.GELU(),
+            nn.Linear(unit_dim, unit_dim), nn.GELU(),
+            nn.Linear(unit_dim, 1)
+        )
+        self.hidden_layers2 = nn.Sequential(
+            nn.Linear(repr_dim + action_dim, unit_dim), nn.GELU(),
+            nn.Linear(unit_dim, unit_dim), nn.GELU(),
+            nn.Linear(unit_dim, unit_dim), nn.GELU(),
+            nn.Linear(unit_dim, 1)
+        )
+        self.optimizer = optim.AdamW(self.parameters(), lr=1e-4)
+    def forward(self, repr, action):
+        h = torch.cat([repr, action], dim=1)
+        q1 = self.hidden_layers1(h)
+        q2 = self.hidden_layers2(h)
+        return q1, q2
 
 class SAC:
-    def __init__(self, img_channels, action_dim, max_action):
-        self.actor = ConvActor(img_channels, action_dim, max_action).to(device)
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=3e-4)
-
-        self.critic1 = ConvCritic(img_channels, action_dim).to(device)
-        self.critic2 = ConvCritic(img_channels, action_dim).to(device)
-        self.critic1_optimizer = optim.Adam(self.critic1.parameters(), lr=3e-4)
-        self.critic2_optimizer = optim.Adam(self.critic2.parameters(), lr=3e-4)
-
-        self.target_critic1 = ConvCritic(img_channels, action_dim).to(device)
-        self.target_critic2 = ConvCritic(img_channels, action_dim).to(device)
-        self.target_critic1.load_state_dict(self.critic1.state_dict())
-        self.target_critic2.load_state_dict(self.critic2.state_dict())
-
-        self.replay_buffer = ReplayBuffer(100000)
-        self.max_action = max_action
-        self.discount = 0.99
-        self.tau = 0.005
-        self.alpha = 0.2
-
-    def select_action(self, state):
-        state = torch.FloatTensor(state).unsqueeze(0).to(device)
-        return self.actor(state).cpu().data.numpy().flatten()
-
-    def train(self, batch_size=256):
-        state, action, reward, next_state, done = self.replay_buffer.sample(batch_size)
-
-        state = torch.FloatTensor(state).to(device)
-        action = torch.FloatTensor(action).to(device)
-        reward = torch.FloatTensor(reward).to(device)
-        next_state = torch.FloatTensor(next_state).to(device)
-        done = torch.FloatTensor(done).to(device)
-
+    def __init__(self, action_space: gym.Space, obs_space: gym.Space, capacity=1e6, device='cuda', batch_size=256, gamma=0.99, tau=0.005):
+        self.device = device
+        self.encoder = Encoder(obs_space.shape).to(device)
+        self.actor = Actor(self.encoder.repr_dim, action_space, unit_dim=64).to(device)
+        self.actor_target = Actor(self.encoder.repr_dim, action_space, unit_dim=64).to(device)
+        self.actor_target.load_state_dict(self.actor.state_dict())
+        self.critic = Critic(self.encoder.repr_dim, action_space.shape[0]).to(device)
+        self.critic_target = Critic(self.encoder.repr_dim, action_space.shape[0]).to(device)
+        self.critic_target.load_state_dict(self.critic.state_dict())
+        self.replay_buffer = ReplayBuffer(capacity)
+        self.batch_size = batch_size
+        self.gamma = gamma
+        self.tau = tau
+        self.reward_scale = 1.0
+        self.alpha = 0.0
+        self.target_entropy = -np.prod(action_space.shape)
+        self.log_alpha = torch.zeros(1, requires_grad=True, device=device)
+        self.alpha_optimizer = optim.AdamW([self.log_alpha], lr=1e-4)
+    def train(self):
+        self.encoder.train()
+        self.actor.train()
+        self.critic.train()
+    def eval(self):
+        self.encoder.eval()
+        self.actor.eval()
+        self.critic.eval()
+    def select_action(self, obs):
+        if len(obs.shape) == 3:
+            obs = obs[np.newaxis]
+        obs = torch.FloatTensor(obs).to(self.device)
         with torch.no_grad():
-            next_action = self.actor(next_state)
-            next_q1 = self.target_critic1(next_state, next_action)
-            next_q2 = self.target_critic2(next_state, next_action)
-            next_q = torch.min(next_q1, next_q2).T
-            log_prob = -self.actor(next_state).mean()  # Approximate log probability
-            target_q = reward + (1 - done) * self.discount * (next_q - self.alpha * log_prob)
-            target_q = target_q.T
-
-        current_q1 = self.critic1(state, action)
-        current_q2 = self.critic2(state, action)
-        critic1_loss = nn.MSELoss()(current_q1, target_q)
-        critic2_loss = nn.MSELoss()(current_q2, target_q)
-
-        self.critic1_optimizer.zero_grad()
-        critic1_loss.backward()
-        self.critic1_optimizer.step()
-
-        self.critic2_optimizer.zero_grad()
-        critic2_loss.backward()
-        self.critic2_optimizer.step()
-
-        log_prob = -self.actor(state).mean()  # Approximate log probability
-        actor_loss = (self.alpha * log_prob - self.critic1(state, self.actor(state))).mean()
-        # actor_loss = -self.critic1(state, self.actor(state)).mean()
-        self.actor_optimizer.zero_grad()
+            repr = self.encoder(obs)
+            action, _ = self.actor(repr)
+        return action.cpu().numpy()[0]
+    def update(self):
+        state, action, reward, next_state, done = self.replay_buffer.sample(self.batch_size)
+        state = torch.FloatTensor(state).to(self.device)
+        action = torch.FloatTensor(action).to(self.device)
+        reward = torch.FloatTensor(reward).to(self.device).unsqueeze(-1)
+        next_state = torch.FloatTensor(next_state).to(self.device)
+        done = torch.FloatTensor(done).to(self.device).unsqueeze(-1)
+        # Critic & Encoder update
+        repr = self.encoder(state)
+        with torch.no_grad(): # Target Policy Smoothing
+            next_repr = self.encoder(next_state)
+            next_action, next_log_prob = self.actor_target(next_repr)
+            next_action = next_action.to(self.device)
+            next_q1, next_q2 = self.critic_target(next_repr, next_action)
+            min_next_q = torch.min(next_q1, next_q2)
+            target_q = reward + self.gamma * (1 - done) * (min_next_q - self.alpha * next_log_prob)
+        q1, q2 = self.critic(repr, action)
+        critic_loss = (q1 - target_q).pow(2).mean() + (q2 - target_q).pow(2).mean()
+        self.critic.optimizer.zero_grad()
+        self.encoder.optimizer.zero_grad()
+        critic_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
+        self.critic.optimizer.step()
+        self.encoder.optimizer.step()
+        # Actor update
+        repr = self.encoder(state.detach())
+        action, log_prob = self.actor(repr)
+        action = action.to(self.device)
+        q1, q2 = self.critic(repr, action)
+        min_q = torch.min(q1, q2)
+        actor_loss = (self.alpha * log_prob - min_q).mean()
+        self.actor.optimizer.zero_grad()
         actor_loss.backward()
-        self.actor_optimizer.step()
-
-        for param, target_param in zip(self.critic1.parameters(), self.target_critic1.parameters()):
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
+        self.actor.optimizer.step()
+        # Target update
+        for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-
-        for param, target_param in zip(self.critic2.parameters(), self.target_critic2.parameters()):
+        for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-
-        # WandBに損失を記録
-        wandb.log({
-            "critic1_loss": critic1_loss.item(),
-            "critic2_loss": critic2_loss.item(),
-            "actor_loss": actor_loss.item(),
-        })
+        # Alpha update
+        alpha_loss = -(self.log_alpha * (log_prob + self.target_entropy).detach()).mean()
+        self.alpha_optimizer.zero_grad()
+        alpha_loss.backward()
+        self.alpha_optimizer.step()
+        self.alpha = self.log_alpha.exp()
+        # wandb.log({"train/critic_loss":critic_loss.item(), "train/actor_loss":actor_loss.item()})
 
 if __name__ == "__main__":
-    # WandBの初期化
-    seed = 0
-    wandb.init(project="sound_turtle", name=f"sac/run{seed}")  # 'your_wandb_username'を適切に変更
+    if '--seed' in sys.argv:
+        seed = int(sys.argv[sys.argv.index('--seed') + 1])
+    else:
+        print("Please specify the seed. (--seed <seed>)")
+    wandb.init(project="SoundTurtle", name=f"sac/run{seed}")
     
-    # env = MyEnv()
-    env = gym.make("CarRacing-v2")
-    env = ResizeObservation(env, (128, 128))
-    env = FrameStack(env, num_stack=4)
+    # 自分の環境を使う場合
+    env = MyEnv()
+    print(env.action_space, env.observation_space)
+    
+    # gymの環境を使う場合
+    # env = gym.make("MountainCarContinuous-v0", render_mode="rgb_array")
+    # env = RenderObservationWrapper(env, shape=(128, 128))
     
     torch.manual_seed(seed)
-    img_channels = env.observation_space.shape[2]  # 画像のチャンネル数 (例: RGBなら3)
-    action_dim = env.action_space.shape[0]
-    max_action = float(env.action_space.high[0])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    sac = SAC(img_channels, action_dim, max_action)
-    episodes = 100000000
+    episodes = 100000000 # とりあえず大きめに設定
     batch_size = 256
     episode_length = 0
     global_step = 0
-    max_step = 100000
+    max_step = 100000 # こちらで制限
+    sac = SAC(env.action_space, env.observation_space, device=device, batch_size=batch_size)
+    sac.train()
+    train_start = False
     for episode in range(episodes):
         episode_length = 0
+        # state, _ = env.reset()
         state = env.reset()
-        state = np.array(state) # 後で消す
-        print("state: ", state)
         episode_reward = 0
         for t in range(200):
             global_step += 1
             episode_length += 1
             action = sac.select_action(state)
             next_state, reward, done, _ = env.step(action)
-            next_state = np.array(next_state) # 後で消す
+            # next_state, reward, terminated, truncated, _ = env.step(action)
+            # done = terminated or truncated
             sac.replay_buffer.push(state, action, reward, next_state, done)
             state = next_state
             episode_reward += reward
             if len(sac.replay_buffer) > batch_size:
-                sac.train(batch_size)
-            else:
-                sac.train(len(sac.replay_buffer))
+                if not train_start:
+                    print("Train Start!")
+                    train_start = True
+                sac.update()
             if done:
                 break
-            if global_step >= max_step:
-                break
-        # エピソード終了時に報酬をWandBにログ
-        wandb.log({"train/score":episode_reward, "train/length":episode_length})
+        if global_step >= max_step:
+            break
+        if train_start:
+            wandb.log({"train/score":episode_reward, "train/length":episode_length})
         print(f"Episode: {episode}, Reward: {episode_reward}")
