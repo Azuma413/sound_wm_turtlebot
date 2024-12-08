@@ -205,6 +205,7 @@ class MySimulator:
                     self.sound_locations = np.array([np.array([self.sound_locations_2d[0][0], self.sound_locations_2d[0][1], self.sound_height])])
         # シミュレーションの実行
         aroom.simulate()
+        print("signals:", aroom.mic_array.signals.shape)
         X = pra.transform.stft.analysis(aroom.mic_array.signals.T, self.nfft, self.nfft // 2)
         X = X.transpose([2, 1, 0])
         # DOAの計算
