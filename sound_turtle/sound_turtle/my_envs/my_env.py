@@ -176,36 +176,37 @@ class MySimulator:
         mic_locs_z = np.concatenate((mic_locs, np.ones((1, mic_locs.shape[1]))*self.robot_height), axis=0)
         aroom.add_microphone_array(mic_locs_z)
         # 音源の位置を回転させる
-        # self.sound_locs = np.array([np.array([
-        #             self.sound_locations_2d[0][0] + self.R*np.cos(2*np.pi*self.count/(self.T*100) + self.phi*2*np.pi),
-        #             self.sound_locations_2d[0][1] + self.R*np.sin(2*np.pi*self.count/(self.T*100) + self.phi*2*np.pi),
-        #             self.sound_height
-        #         ])])
-        # for i in range(self.sound_locs.shape[0]):
-        #     aroom.add_source(self.sound_locs[i], signal=self.audio)
+        self.sound_locs = np.array([np.array([
+                    self.sound_locations_2d[0][0] + self.R*np.cos(2*np.pi*self.count/(self.T*100) + self.phi*2*np.pi),
+                    self.sound_locations_2d[0][1] + self.R*np.sin(2*np.pi*self.count/(self.T*100) + self.phi*2*np.pi),
+                    self.sound_height
+                ])])
+        for i in range(self.sound_locs.shape[0]):
+            aroom.add_source(self.sound_locs[i], signal=self.audio)
+            # success = False
+            # while not success:
+            #     try:
+            #         aroom.add_source(sound_locs[i], signal=self.audio) # 運が悪いと音源が壁の中に生成されることがある
+            #         success = True
+            #     except ValueError as e:
+            #         print(f"例外が発生しました: {e}. 再試行します...")
+            #         sound_locs = self.pixel2coord(self.map_image.shape*self.sound_base_pos) + self.sound_range*(np.random.rand(self.sound_locations_2d.shape[0], 2)*2 - 1) # 音源の位置
+            #         sound_locs = np.array([np.array([self.sound_locations_2d[i][0], self.sound_locations_2d[i][1], self.sound_height]) for i in range(self.sound_locations_2d.shape[0])])
+            #         self.sound_locations = np.array([np.array([self.sound_locations_2d[0][0], self.sound_locations_2d[0][1], self.sound_height])])
+
+
+        # for i in range(self.sound_locations.shape[0]):
         #     success = False
         #     while not success:
         #         try:
-        #             aroom.add_source(sound_locs[i], signal=self.audio) # 運が悪いと音源が壁の中に生成されることがある
+        #             aroom.add_source(self.sound_locations[i], signal=self.audio) # 運が悪いと音源が壁の中に生成されることがある
         #             success = True
         #         except ValueError as e:
         #             print(f"例外が発生しました: {e}. 再試行します...")
-        #             sound_locs = self.pixel2coord(self.map_image.shape*self.sound_base_pos) + self.sound_range*(np.random.rand(self.sound_locations_2d.shape[0], 2)*2 - 1) # 音源の位置
-        #             sound_locs = np.array([np.array([self.sound_locations_2d[i][0], self.sound_locations_2d[i][1], self.sound_height]) for i in range(self.sound_locations_2d.shape[0])])
-                    # self.sound_locations = np.array([np.array([self.sound_locations_2d[0][0], self.sound_locations_2d[0][1], self.sound_height])])
-        for i in range(self.sound_locations.shape[0]):
-            success = False
-            while not success:
-                try:
-                    aroom.add_source(self.sound_locations[i], signal=self.audio) # 運が悪いと音源が壁の中に生成されることがある
-                    success = True
-                except ValueError as e:
-                    print(f"例外が発生しました: {e}. 再試行します...")
-                    self.sound_locations_2d = self.pixel2coord(self.map_image.shape*self.sound_base_pos) + self.sound_range*(np.random.rand(1, 2)*2 - 1) # 音源の位置
-                    self.sound_locations = np.array([np.array([self.sound_locations_2d[0][0], self.sound_locations_2d[0][1], self.sound_height])])
+        #             self.sound_locations_2d = self.pixel2coord(self.map_image.shape*self.sound_base_pos) + self.sound_range*(np.random.rand(1, 2)*2 - 1) # 音源の位置
+        #             self.sound_locations = np.array([np.array([self.sound_locations_2d[0][0], self.sound_locations_2d[0][1], self.sound_height])])
         # シミュレーションの実行
         aroom.simulate()
-        print("signals:", aroom.mic_array.signals.shape)
         X = pra.transform.stft.analysis(aroom.mic_array.signals.T, self.nfft, self.nfft // 2)
         X = X.transpose([2, 1, 0])
         # DOAの計算
@@ -225,8 +226,8 @@ class MySimulator:
         # パラメータ
         A = 4.5 # spatial_respの値の内，情報を持たないと判断する値の最大値
         B = 0.05 # spatial_respの値をどれだけスケールするか
-        C = 0.85 # 値を更新する際の最小値
-        D = 3 # 最低値
+        C = 0.95 # 0.85 # 値を更新する際の最小値
+        D = 8 # 3 # 最低値
         for i, point_angle in enumerate(point_angles):
             self.image[points[i,0], points[i,1], 0] *= max(spatial_resp[int(point_angle)], A)*B - A*B + C
         self.image[self.image[:,:,0] < D, 0] = D
@@ -297,8 +298,8 @@ class MyEnv(gym.Env):
         # sound_locations = (np.random.rand(2, 2)*2 - 1).tolist() # 音源が2つの場合
         # シミュレータの初期化
         self.my_sim = MySimulator(map_name=self.map_name, robot_pos=robot_pos, sound_locations=sound_locations, threshold=self.confidence_threshold, room_num=self.room_num)
-        self.my_sim.T = np.random.rand()*0.3 + 0.7
-        self.my_sim.R = np.random.rand()*0.3 + 0.7
+        self.my_sim.T = np.random.rand()*0.6 + 0.7
+        self.my_sim.R = np.random.rand()*0.6 + 0.7
         self.my_sim.phi = np.random.rand()
         # シミュレーションの実行
         self.my_sim.simulate()
@@ -396,13 +397,13 @@ class MyEnv(gym.Env):
         x, y = self.my_sim.coord2pixel(self.my_sim.center)*scale # ピクセル上の座標を取得
         cv2.circle(img, (int(y), int(x)), 5, (0, 200, 200), -1)
         # 音源の位置を描画
-        for point in self.my_sim.sound_locations_2d:
-            x, y = self.my_sim.coord2pixel(point)*scale
-            cv2.circle(img, (int(y), int(x)), 5, (255, 255, 255), -1)
-        # for point in self.my_sim.sound_locs:
-        #     point = point[:2]
+        # for point in self.my_sim.sound_locations_2d:
         #     x, y = self.my_sim.coord2pixel(point)*scale
         #     cv2.circle(img, (int(y), int(x)), 5, (255, 255, 255), -1)
+        for point in self.my_sim.sound_locs:
+            point = point[:2]
+            x, y = self.my_sim.coord2pixel(point)*scale
+            cv2.circle(img, (int(y), int(x)), 5, (255, 255, 255), -1)
         # self.confidence_threshold*255以上のRチャンネルの値を持つピクセルを囲う
         gray = img[:,:,0]
         _, bin_img = cv2.threshold(gray, int(self.confidence_threshold*255), 255, cv2.THRESH_BINARY) # 二値化
@@ -418,7 +419,7 @@ class MyEnv(gym.Env):
         if len(self.estimated_sound_location) > 0:
             # self.estimated_sound_locationをndarrayのintに変換
             point = (np.array(self.estimated_sound_location[-1])*scale).astype(np.int32)
-            cv2.circle(img, (point[::-1]), 5, (255, 255, 0), -1)
+            cv2.circle(img, (point[::-1]), 5, (255, 100, 255), -1)
         if self.drow_sound_trajectory:
             for i in range(len(self.estimated_sound_location) - 1):
                 p1 = (self.estimated_sound_location[i]*scale).astype(np.int32)
@@ -447,5 +448,5 @@ if __name__ == "__main__":
     env = MyEnv()
     obs = env.reset()
     obs, rewad, done, info = env.step([0.5, 0.5])
-    print(obs.shape)
-    print(rewad)
+    # print(obs.shape)
+    # print(rewad)
