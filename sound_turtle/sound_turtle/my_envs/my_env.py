@@ -226,8 +226,8 @@ class MySimulator:
         # パラメータ
         A = 4.5 # spatial_respの値の内，情報を持たないと判断する値の最大値
         B = 0.05 # spatial_respの値をどれだけスケールするか
-        C = 0.95 # 0.85 # 値を更新する際の最小値
-        D = 8 # 3 # 最低値
+        C = 0.9 # 0.85 # 値を更新する際の最小値
+        D = 10 # 3 # 最低値
         for i, point_angle in enumerate(point_angles):
             self.image[points[i,0], points[i,1], 0] *= max(spatial_resp[int(point_angle)], A)*B - A*B + C
         self.image[self.image[:,:,0] < D, 0] = D
