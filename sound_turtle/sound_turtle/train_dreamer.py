@@ -13,7 +13,7 @@ def main(num):
   size = 'medium' # 'small', 'medium', 'large', 'xlarge'
   room_num = 0 # 0:長方形, 1:L字, 2:仕切り, 3:リアル
   image_horizon = 15 # 15
-  name = f'dreamerv3/{size}/ih_{image_horizon}/room{room_num}/alt_blue/run{num}'
+  name = f'dreamerv3/tracking2/run{num}'
   config = embodied.Config(dreamerv3.configs['defaults'])
   config = config.update(dreamerv3.configs[size])
   config = config.update({
