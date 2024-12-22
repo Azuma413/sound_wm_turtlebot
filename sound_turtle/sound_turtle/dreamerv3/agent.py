@@ -77,11 +77,11 @@ class Agent(nj.Module):
     self.config.jax.jit and print('Tracing train function.')
     metrics = {}
     data = self.preprocess(data)
-    state, wm_outs, mets = self.wm.train(data, state)
+    state, wm_outs, mets = self.wm.train(data, state) # WMを訓練
     metrics.update(mets)
     context = {**data, **wm_outs['post']}
     start = tree_map(lambda x: x.reshape([-1] + list(x.shape[2:])), context)
-    _, mets = self.task_behavior.train(self.wm.imagine, start, context)
+    _, mets = self.task_behavior.train(self.wm.imagine, start, context) #
     metrics.update(mets)
     if self.config.expl_behavior != 'None':
       _, mets = self.expl_behavior.train(self.wm.imagine, start, context)
