@@ -1,7 +1,5 @@
 # Sound Turtlebot: A ROS2-based Sound Source Localization Robot
-<div align="center">
-  <!-- You can add a project logo/image here if desired -->
-</div>
+![image1](image_data/animation.png)
 
 ## Overview
 This project implements a sound source localization system using a Turtlebot3 robot with ROS2. The system combines SLAM-based navigation with deep reinforcement learning algorithms (DreamerV3, DrQv2) to enable the robot to autonomously locate and navigate towards sound sources in an environment.
@@ -107,6 +105,7 @@ ros2 run demo_nodes_cpp listener
 ```
 
 ### SLAM Mapping
+![image1](image_data/robot.JPG)
 ```bash
 # Terminal 1 (on Turtlebot)
 ros2 launch turtlebot3_bringup robot.launch.py
@@ -151,8 +150,9 @@ python sound_turtle/sound_turtle/train_drq.py
 │   │   └── drqv2/                 # DrQv2 implementation
 │   └── test/                       # Test files
 ├── sound_turtle_msgs/              # Custom ROS2 messages
-├── WorkSpace/                      # Development workspace
-└── CADData/                        # CAD models
+├── work_space/                      # Development workspace
+├── image_data/                      # Image Data
+└── cad_data/                        # CAD models
 ```
 
 ## Important Directories
