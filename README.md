@@ -42,7 +42,8 @@ colcon build
 - 学習用設定の変更\
 `sound_turtle/sound_turtle/my_config/`に設定ファイルが格納されています．
 - 学習用環境の変更\
-`sound_turtle/sound_turtle/my_envs/my_env.py`に学習用のシミュレータが実装されています．
+`sound_turtle/sound_turtle/my_envs/my_env.py`に学習用のシミュレータが実装されています．\
+詳細は[こちら](sound_turtle/sound_turtle/my_envs/my_env.md)を参照してください．
 - 学習の実行
 ```bash
 # DreamerV3の学習  
