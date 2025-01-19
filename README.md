@@ -1,187 +1,92 @@
-# Sound Turtlebot: A ROS2-based Sound Source Localization Robot
+# Sound WM Turtlebot: 世界モデルベース強化学習を利用した，単一移動ロボットによる音源定位
 ![image1](image_data/animation.png)
 
-## Overview
-This project implements a sound source localization system using a Turtlebot3 robot with ROS2. The system combines SLAM-based navigation with deep reinforcement learning algorithms (DreamerV3, DrQv2) to enable the robot to autonomously locate and navigate towards sound sources in an environment.
+## 概要
+このプロジェクトは、ROS2を利用したTurtlebot3による音源定位システムの実装を目指しています。
+SLAMに基づくナビゲーションと深層強化学習アルゴリズムを組み合わせ、ロボットが環境内で音源を自律的に特定し、追跡できるようにします。
+現時点では強化学習（DreamerV3、DrQ-v2）によるシミュレーション上でのポリシー学習に対応しています．
 
-## Installation
+## インストール
+### システム要件
+- Ubuntu 22.04
+- ROS2 Humble
+- Python 3.8以上
+- CUDA対応のNVIDIA GPU
 
-### System Requirements
-* Ubuntu 22.04
-* ROS2 Humble
-* Python 3.8+
-* NVIDIA GPU with CUDA support
+### [ROS2のインストール](documents/ros2_setup.md)
 
-### ROS2 Humble Setup
+### [NVIDIAドライバーとCUDAのセットアップ](documents/cuda_setup.md)
+
+### プロジェクトのセットアップ
 ```bash
-# Set up locale
-sudo apt update
-sudo locale-gen ja_JP ja_JP.UTF-8
-sudo update-locale LC_ALL=ja_JP.UTF-8 LANG=ja_JP.UTF-8
-export LANG=ja_JP.UTF-8
-
-# Add ROS2 repository
-sudo apt install curl gnupg2 lsb-release -y
-sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(source /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
-
-# Install ROS2 packages
-sudo apt update && sudo apt upgrade
-sudo apt install -y ros-humble-desktop python3-colcon-common-extensions python3-rosdep python3-argcomplete
-sudo rosdep init
-rosdep update
-
-# Install Gazebo and RQT
-sudo apt -y install gazebo
-sudo apt install ros-humble-gazebo-*
-sudo apt install ros-humble-rqt-*
-
-# Install additional ROS2 packages
-sudo apt install ros-humble-cartographer
-sudo apt install ros-humble-cartographer-ros
-sudo apt install ros-humble-navigation2
-sudo apt install ros-humble-nav2-bringup
-sudo apt install ros-humble-dynamixel-sdk
-sudo apt install ros-humble-turtlebot3-msgs
-sudo apt install ros-humble-turtlebot3
-```
-
-### Environment Setup
-Add to ~/.bashrc:
-```bash
-source /opt/ros/humble/setup.bash
-export ROS_DOMAIN_ID=30
-export TURTLEBOT3_MODEL=waffle
-export LDS_MODEL=LDS-02
-source ~/ros2_ws/install/setup.bash
-```
-
-### NVIDIA Driver and CUDA Setup
-```bash
-# Check GPU
-lspci | grep -i nvidia | grep VGA
-
-# Install NVIDIA driver
-ubuntu-drivers devices
-sudo apt install -y nvidia-driver-550-open
-sudo apt install -y cuda-drivers-550
-
-# Install CUDA toolkit
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
-sudo dpkg -i cuda-keyring_1.1-1_all.deb
-sudo apt-get update
-sudo apt-get -y install cuda-toolkit-12-4
-```
-
-### Project Setup
-```bash
-# Create workspace
+# ワークスペースの作成
 mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
 git clone https://github.com/Azuma413/sound_turtlebot.git
 
-# Install Python dependencies
+# Python依存パッケージのインストール
 cd sound_turtlebot
 pip install -r requirements.txt
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 
-# Build workspace
+# ワークスペースのビルド
 cd ~/ros2_ws
 colcon build
 ```
 
-## Usage
+## 使用方法
 
-### Testing ROS Communication
-Test the ROS communication between the Turtlebot and PC:
+### [実環境動作(実装中)](documents/ros_use.md)
 
+### 学習
+- 学習用設定の変更\
+`sound_turtle/sound_turtle/my_config/`に設定ファイルが格納されています．
+- 学習用環境の変更\
+`sound_turtle/sound_turtle/my_envs/my_env.py`に学習用のシミュレータが実装されています．
+- 学習の実行
 ```bash
-# Terminal 1 (on Turtlebot)
-ssh raspi1@raspi1.local
-ros2 run demo_nodes_cpp talker
+# DreamerV3の学習  
+python sound_turtle/sound_turtle/train_dreamer.py  
 
-# Terminal 2 (on PC)
-ros2 run demo_nodes_cpp listener
+# DrQv2の学習  
+python sound_turtle/sound_turtle/train_drq.py  
 ```
 
-### SLAM Mapping
+## ディレクトリ構成
+```
+.  
+├── sound_turtle/                    # メインのROS2パッケージ  
+│   ├── launch/                     # Launchファイル  
+│   ├── sound_turtle/               # Pythonパッケージ  
+│   │   ├── my_envs/               # 環境実装  
+│   │   ├── my_config/             # 設定ファイル  
+│   │   ├── dreamerv3/             # DreamerV3実装  
+│   │   └── drqv2/                 # DrQv2実装  
+│   └── test/                       # テストファイル  
+├── sound_turtle_msgs/              # カスタムROS2メッセージ  
+├── work_space/                      # 開発用ワークスペース  
+├── image_data/                      # 画像データ  
+└── cad_data/                        # CADモデル  
+```
+
+## 重要なディレクトリ
+- 学習時に利用するSLAMマップ: `sound_turtle/sound_turtle/my_envs/map/`
+- 学習済み重み: `sound_turtle/sound_turtle/weight/`
+- 学習用のconfig: `sound_turtle/sound_turtle/my_config/`
+
+## CADデータ
+TurtleBot3 Burger用のマイクロフォンアレイ固定パーツを配布します．\
+`.stl`と`.stp`がありますが，どちらも同じ内容です．\
+マイクロフォンアレイを固定する金具は[こちら](https://www.amazon.co.jp/dp/B07QKTVSPQ?ref=ppx_yo2ov_dt_b_fed_asin_title)を利用しています．
 ![image1](image_data/robot.JPG)
-```bash
-# Terminal 1 (on Turtlebot)
-ros2 launch turtlebot3_bringup robot.launch.py
 
-# Terminal 2
-ros2 launch turtlebot3_cartographer cartographer.launch.py
+## ライセンスと引用
 
-# Terminal 3 (for keyboard control)
-ros2 run turtlebot3_teleop teleop_keyboard
+### ライセンス
+このプロジェクトはリポジトリ内の[LICENSE](LICENSE)ファイルの下でライセンスされています。
 
-# Terminal 4 (save map when finished)
-ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/sound_turtlebot/sound_turtle/sound_turtle/my_envs/map/main
+### 引用
+本プロジェクトを研究に使用する場合は、以下を引用してください：
 ```
-
-### Main Program Execution
-```bash
-# Terminal 1 (on Turtlebot)
-ros2 launch sound_turtle turtle.launch.py
-
-# Terminal 2
-ros2 launch sound_turtle main.launch.py
-```
-
-### Training
-```bash
-# Train DreamerV3
-python sound_turtle/sound_turtle/train_dreamer.py
-
-# Train DrQv2
-python sound_turtle/sound_turtle/train_drq.py
-```
-
-## Directory Structure
-```
-.
-├── sound_turtle/                    # Main ROS2 package
-│   ├── launch/                     # Launch files
-│   ├── sound_turtle/               # Python package
-│   │   ├── my_envs/               # Environment implementations
-│   │   ├── my_config/             # Configuration files
-│   │   ├── dreamerv3/             # DreamerV3 implementation
-│   │   └── drqv2/                 # DrQv2 implementation
-│   └── test/                       # Test files
-├── sound_turtle_msgs/              # Custom ROS2 messages
-├── work_space/                      # Development workspace
-├── image_data/                      # Image Data
-└── cad_data/                        # CAD models
-```
-
-## Important Directories
-- Maps: `sound_turtle/sound_turtle/my_envs/map/`
-- Weights: `sound_turtle/sound_turtle/weight/`
-- Configs: `sound_turtle/sound_turtle/my_config/`
-
-### Additional Tools Setup
-```bash
-# Install terminator (recommended terminal emulator)
-sudo apt install terminator
-```
-
-### Turtlebot Network Setup
-1. Connect a display to the Turtlebot and configure WiFi connection
-2. Verify SSH connectivity:
-```bash
-ssh raspi1@raspi1.local
-cd ros2_ws/src/sound_turtlebot
-git pull
-```
-
-## License and Citation
-
-### License
-This project is licensed under the [LICENSE](LICENSE) file in the repository.
-
-### Citation
-If you use this project in your research, please cite:
-```
-[Citation information to be added]
+[引用情報を追加予定]
 ```
