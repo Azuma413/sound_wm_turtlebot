@@ -65,7 +65,7 @@ python sound_turtle/sound_turtle/train_drq.py
 │   │   └── drqv2/                 # DrQv2実装  
 │   └── test/                       # テストファイル  
 ├── sound_turtle_msgs/              # カスタムROS2メッセージ  
-├── work_space/                      # 開発用ワークスペース  
+├── documents/                      # マークダウン格納フォルダ
 ├── image_data/                      # 画像データ  
 └── cad_data/                        # CADモデル  
 ```
