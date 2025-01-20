@@ -89,5 +89,13 @@ TurtleBot3 Burger用のマイクロフォンアレイ固定パーツを配布し
 ### 引用
 本プロジェクトを研究に使用する場合は、以下を引用してください：
 ```
-[引用情報を追加予定]
+@misc{hiratsuka2024world,
+  title = {世界モデルベースの深層強化学習による音源追跡の検討},
+  author = {平塚 謙良 and 小島 諒介},
+  howpublished={第66回人工知能学会 AI チャレンジ研究会},
+  url={https://www.osaka-kyoiku.ac.jp/~challeng/SIG-Challenge-066/SIG-Challenge-066-07.pdf}
+  year = {2024},
+  month = {Dec. 20},
+  place={東京},
+}
 ```
